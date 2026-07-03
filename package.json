@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "prettier": "^3.8.4"
+    "prettier": "^3.9.4"
   },
   "module": "src/index.ts"
 }

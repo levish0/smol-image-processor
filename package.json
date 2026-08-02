@@ -2,7 +2,7 @@
   "name": "smol-media-processor",
   "version": "0.2.0",
   "description": "Small Bun/Elysia service that normalizes uploaded images to WebP and videos to MP4.",
-  "author": "Levi Laine <shiueo.csh@gmail.com>",
+  "author": "Levi Laine <levi.laine.me@gmail.com>",
   "repository": "https://github.com/levish0/smol-media-processor",
   "type": "module",
   "scripts": {

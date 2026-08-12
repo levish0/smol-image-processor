@@ -1,25 +1,329 @@
 name: Docker Build & Push
 
 on:
+  pull_request:
   push:
     tags: ["v*"]
 
 env:
   REGISTRY: ghcr.io
+  LOCAL_IMAGE: smol-media-processor:release-candidate
 
 jobs:
-  build:
+  check:
+    uses: ./.github/workflows/check.yml
+
+  verify-image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+
+      - name: Install response verifier dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Require an exact immutable package version tag
+        if: github.ref_type == 'tag'
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(jq --raw-output .version package.json)"
+          test "${GITHUB_REF_NAME}" = "v${package_version}"
+          echo "value=${package_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the only release candidate image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Exercise the exact image under production hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            docker rm -f smp-smoke smp-tiny-tmp smp-no-egress >/dev/null 2>&1 || true
+            docker network rm smp-smoke-net >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          INPUT_PATH="${RUNNER_TEMP}/input.jpg" \
+            bun -e 'import sharp from "sharp"; await sharp({create:{width:1920,height:1080,channels:3,background:{r:37,g:99,b:211}}}).withExif({IFD0:{Make:"SmokeCam"}}).jpeg({quality:90}).toFile(process.env.INPUT_PATH)'
+          TINY_VIDEO_PATH="${RUNNER_TEMP}/tiny-tmp-input.mp4" \
+            bun -e 'const b=Buffer.alloc(2*1024*1024);Buffer.from("ftypisom").copy(b,4);await Bun.write(process.env.TINY_VIDEO_PATH,b)'
+          jq '.outputs = {small: .outputs.small}' \
+            contracts/examples/responsive-image-recipe-v1.json \
+            > "${RUNNER_TEMP}/single-output-recipe.json"
+          docker network create smp-smoke-net >/dev/null
+          docker run --detach --name smp-smoke \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 2g \
+            --cpus 2 \
+            --pids-limit 128 \
+            --network smp-smoke-net \
+            --env PROCESSING_CONCURRENCY=1 \
+            --publish 127.0.0.1:16701:6701 \
+            "${LOCAL_IMAGE}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent \
+              --output "${RUNNER_TEMP}/health.json" \
+              http://127.0.0.1:16701/health; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs smp-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail-with-body --silent --show-error \
+            --dump-header "${RUNNER_TEMP}/single-headers.txt" \
+            --output "${RUNNER_TEMP}/single-response.bin" \
+            --form "file=@${RUNNER_TEMP}/input.jpg;type=image/jpeg" \
+            --form "recipe=<${RUNNER_TEMP}/single-output-recipe.json;type=application/json" \
+            http://127.0.0.1:16701/v1/images/process
+          bun scripts/verify-image-response.ts \
+            "${RUNNER_TEMP}/single-headers.txt" \
+            "${RUNNER_TEMP}/single-response.bin" \
+            "${RUNNER_TEMP}/input.jpg" \
+            "${RUNNER_TEMP}/single-output-recipe.json" \
+            "${RUNNER_TEMP}/health.json"
+          curl --fail-with-body --silent --show-error \
+            --dump-header "${RUNNER_TEMP}/headers.txt" \
+            --output "${RUNNER_TEMP}/response.bin" \
+            --form "file=@${RUNNER_TEMP}/input.jpg;type=image/jpeg" \
+            --form "recipe=<contracts/examples/responsive-image-recipe-v1.json;type=application/json" \
+            http://127.0.0.1:16701/v1/images/process
+          bun scripts/verify-image-response.ts \
+            "${RUNNER_TEMP}/headers.txt" \
+            "${RUNNER_TEMP}/response.bin" \
+            "${RUNNER_TEMP}/input.jpg" \
+            contracts/examples/responsive-image-recipe-v1.json \
+            "${RUNNER_TEMP}/health.json"
+
+          CHUNKED_INPUT_PATH="${RUNNER_TEMP}/input.jpg" \
+          CHUNKED_RECIPE_PATH="contracts/examples/responsive-image-recipe-v1.json" \
+            bun -e '
+              const boundary="smp-one-byte";
+              const file=Buffer.from(await Bun.file(process.env.CHUNKED_INPUT_PATH).arrayBuffer());
+              const recipe=Buffer.from(await Bun.file(process.env.CHUNKED_RECIPE_PATH).arrayBuffer());
+              const body=Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="input.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),file,Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="recipe"\r\nContent-Type: application/json\r\n\r\n`),recipe,Buffer.from(`\r\n--${boundary}--\r\n`)]);
+              async function* chunks(){for(let offset=0;offset<body.length;offset+=1)yield body.subarray(offset,offset+1);}
+              const response=await fetch("http://127.0.0.1:16701/v1/images/process",{method:"POST",headers:{"content-type":`multipart/form-data; boundary=${boundary}`},body:chunks()});
+              if(!response.ok)throw new Error(await response.text());
+              if(!(response.headers.get("content-type")??"").startsWith("multipart/related"))process.exit(1);
+              if((await response.arrayBuffer()).byteLength===0)process.exit(1);
+            '
+          curl --fail --silent http://127.0.0.1:16701/health >/dev/null
+
+          docker exec smp-smoke ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i 'testsrc=duration=1:size=1920x1080:rate=30' \
+            -f lavfi -i 'sine=frequency=440:duration=1' \
+            -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            -c:a aac /tmp/normal-1080p.mp4
+          docker exec smp-smoke base64 -w 0 /tmp/normal-1080p.mp4 \
+            | base64 --decode > "${RUNNER_TEMP}/normal-1080p.mp4"
+          curl --fail-with-body --silent --show-error --max-time 180 \
+            --dump-header "${RUNNER_TEMP}/normal-video-headers.txt" \
+            --output "${RUNNER_TEMP}/normal-video-output.mp4" \
+            --form "file=@${RUNNER_TEMP}/normal-1080p.mp4;type=video/mp4" \
+            http://127.0.0.1:16701/v1/videos/process
+          test -s "${RUNNER_TEMP}/normal-video-output.mp4"
+          grep --ignore-case '^content-type: video/mp4' \
+            "${RUNNER_TEMP}/normal-video-headers.txt" >/dev/null
+          docker cp "${RUNNER_TEMP}/normal-video-output.mp4" \
+            smp-smoke:/tmp/normal-video-output.mp4
+          docker exec smp-smoke prlimit --as=805306368 -- ffprobe \
+            -v error -select_streams v:0 \
+            -show_entries stream=codec_name,width,height \
+            -of json /tmp/normal-video-output.mp4 \
+            | jq --exit-status \
+              '.streams[0] == {"codec_name":"h264","width":1920,"height":1080}' \
+              >/dev/null
+          curl --fail --silent http://127.0.0.1:16701/health >/dev/null
+
+          cp "${RUNNER_TEMP}/normal-1080p.mp4" \
+            "${RUNNER_TEMP}/max-video-input.mp4"
+          truncate --size=104857600 "${RUNNER_TEMP}/max-video-input.mp4"
+          curl --fail-with-body --silent --show-error --max-time 180 \
+            --output "${RUNNER_TEMP}/max-video-output.mp4" \
+            --form "file=@${RUNNER_TEMP}/max-video-input.mp4;type=video/mp4" \
+            http://127.0.0.1:16701/v1/videos/process
+          test -s "${RUNNER_TEMP}/max-video-output.mp4"
+          peak_memory_bytes="$(docker exec smp-smoke sh -c '
+            if [ -r /sys/fs/cgroup/memory.peak ]; then
+              cat /sys/fs/cgroup/memory.peak
+            elif [ -r /sys/fs/cgroup/memory/memory.max_usage_in_bytes ]; then
+              cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes
+            else
+              exit 1
+            fi
+          ')"
+          test "${peak_memory_bytes}" -gt 0
+          test "${peak_memory_bytes}" -lt 2147483648
+          test "$(docker inspect smp-smoke --format '{{.State.OOMKilled}}')" = 'false'
+          curl --fail --silent http://127.0.0.1:16701/health >/dev/null
+
+          docker exec smp-smoke ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i 'color=black:size=64x64:rate=1' -t 1 \
+            -c:v libx265 -pix_fmt yuv420p10le /tmp/high-bit.mp4
+          docker exec smp-smoke base64 -w 0 /tmp/high-bit.mp4 \
+            | base64 --decode > "${RUNNER_TEMP}/high-bit.mp4"
+          high_bit_status="$(curl --silent --show-error \
+            --output "${RUNNER_TEMP}/high-bit-error.json" \
+            --write-out '%{http_code}' \
+            --form "file=@${RUNNER_TEMP}/high-bit.mp4;type=video/mp4" \
+            http://127.0.0.1:16701/v1/videos/process)"
+          test "${high_bit_status}" = '415'
+          jq --exit-status '.code == "unsupported_format"' \
+            "${RUNNER_TEMP}/high-bit-error.json" >/dev/null
+
+          docker exec smp-smoke ffmpeg -hide_banner -loglevel error -y \
+            -f lavfi -i 'color=black:size=3840x2160:rate=1' -frames:v 1 \
+            -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            /tmp/unsafe-working-set.mp4
+          docker exec smp-smoke base64 -w 0 /tmp/unsafe-working-set.mp4 \
+            | base64 --decode > "${RUNNER_TEMP}/unsafe-working-set.mp4"
+          working_set_status="$(curl --silent --show-error \
+            --output "${RUNNER_TEMP}/working-set-error.json" \
+            --write-out '%{http_code}' \
+            --form "file=@${RUNNER_TEMP}/unsafe-working-set.mp4;type=video/mp4" \
+            http://127.0.0.1:16701/v1/videos/process)"
+          test "${working_set_status}" = '413'
+          jq --exit-status '.code == "limit_exceeded"' \
+            "${RUNNER_TEMP}/working-set-error.json" >/dev/null
+          curl --fail --silent http://127.0.0.1:16701/health >/dev/null
+
+          docker run --detach --name smp-tiny-tmp \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=1m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 2g \
+            --cpus 2 \
+            --pids-limit 128 \
+            --network smp-smoke-net \
+            --publish 127.0.0.1:16702:6701 \
+            "${LOCAL_IMAGE}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:16702/health >/dev/null; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs smp-tiny-tmp
+              exit 1
+            fi
+            sleep 1
+          done
+          tiny_status="$(curl --silent --show-error \
+            --output "${RUNNER_TEMP}/tiny-error.json" \
+            --write-out '%{http_code}' \
+            --form "file=@${RUNNER_TEMP}/tiny-tmp-input.mp4;type=video/mp4" \
+            http://127.0.0.1:16702/v1/videos/process)"
+          test "${tiny_status}" = '503'
+          jq --exit-status '.code == "processor_unavailable"' \
+            "${RUNNER_TEMP}/tiny-error.json" >/dev/null
+          curl --fail --silent http://127.0.0.1:16702/health >/dev/null
+          test -z "$(docker exec smp-tiny-tmp sh -c \
+            'find /tmp -maxdepth 1 -type f -name "smp-*" -print -quit')"
+          test "$(docker inspect smp-smoke --format '{{.Config.User}}')" = "bun"
+          test "$(docker inspect smp-smoke --format '{{.HostConfig.ReadonlyRootfs}}')" = "true"
+          test "$(docker inspect smp-smoke --format '{{.HostConfig.Memory}}')" = '2147483648'
+          test "$(docker inspect smp-smoke --format '{{.HostConfig.PidsLimit}}')" = '128'
+
+          docker run --detach --name smp-no-egress \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 2g \
+            --cpus 2 \
+            --pids-limit 128 \
+            --network none \
+            --env PROCESSING_CONCURRENCY=1 \
+            "${LOCAL_IMAGE}"
+          for attempt in $(seq 1 30); do
+            if docker exec smp-no-egress bun -e \
+              'const r=await fetch("http://127.0.0.1:6701/health");process.exit(r.ok?0:1)' \
+              >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs smp-no-egress
+              exit 1
+            fi
+            sleep 1
+          done
+          docker exec --interactive smp-no-egress sh -c \
+            'cat > /tmp/input.jpg' < "${RUNNER_TEMP}/input.jpg"
+          docker exec --interactive smp-no-egress sh -c \
+            'cat > /tmp/recipe.json' < "${RUNNER_TEMP}/single-output-recipe.json"
+          docker exec smp-no-egress bun -e '
+            const boundary="smp-none";
+            const file=Buffer.from(await Bun.file("/tmp/input.jpg").arrayBuffer());
+            const recipe=Buffer.from(await Bun.file("/tmp/recipe.json").arrayBuffer());
+            const body=Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="input.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),file,Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="recipe"\r\nContent-Type: application/json\r\n\r\n`),recipe,Buffer.from(`\r\n--${boundary}--\r\n`)]);
+            const response=await fetch("http://127.0.0.1:6701/v1/images/process",{method:"POST",headers:{"content-type":`multipart/form-data; boundary=${boundary}`},body});
+            if(!response.ok)throw new Error(await response.text());
+            if(!(response.headers.get("content-type")??"").startsWith("multipart/related"))process.exit(1);
+            if((await response.arrayBuffer()).byteLength===0)process.exit(1);
+          '
+          test "$(docker inspect smp-no-egress --format '{{.HostConfig.NetworkMode}}')" = 'none'
+
+      - name: Export the exact tested image
+        if: github.ref_type == 'tag'
+        run: docker save --output "${RUNNER_TEMP}/release-candidate.tar" "${LOCAL_IMAGE}"
+
+      - name: Upload the exact tested image
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-image
+          path: ${{ runner.temp }}/release-candidate.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: verify-image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Download the exact tested image
+        uses: actions/download-artifact@v5
+        with:
+          name: release-candidate-image
+          path: ${{ runner.temp }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: Load the exact tested image
+        run: docker load --input "${RUNNER_TEMP}/release-candidate.tar"
 
       - name: Log in to Container Registry
         uses: docker/login-action@v4.6.0
@@ -28,37 +332,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-
-      - name: Build summary
+      - name: Push the already-tested immutable image
+        id: push
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify-image.outputs.version }}
         run: |
-          echo "## Packages Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Docker images have been published to GitHub Container Registry:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### smol-image-processor" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          target="${REGISTRY}/${GITHUB_REPOSITORY}:${VERSION}"
+          docker tag "${LOCAL_IMAGE}" "${target}"
+          docker push "${target}"
+          digest="$(docker image inspect "${target}" --format '{{index .RepoDigests 0}}')"
+          test -n "${digest}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish immutable image summary
+        shell: bash
+        run: |
+          {
+            echo '## Package published'
+            echo
+            echo 'The exact hardened-smoke-tested image was pushed:'
+            echo
+            echo '```text'
+            echo '${{ steps.push.outputs.digest }}'
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

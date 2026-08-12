@@ -3,6 +3,7 @@ name: check
 on:
   push:
   pull_request:
+  workflow_call:
 
 jobs:
   check:
@@ -14,7 +15,7 @@ jobs:
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.2.20
 
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -22,11 +23,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Check formatting
-        run: bun run fmt:check
-
-      - name: Test
-        run: bun test
-
-      - name: Build
-        run: bun run build
+      - name: Check contracts, formatting, types, tests, and build
+        run: bun run check

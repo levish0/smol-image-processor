@@ -154,8 +154,9 @@ jobs:
           test -s "${RUNNER_TEMP}/normal-video-output.mp4"
           grep --ignore-case '^content-type: video/mp4' \
             "${RUNNER_TEMP}/normal-video-headers.txt" >/dev/null
-          docker cp "${RUNNER_TEMP}/normal-video-output.mp4" \
-            smp-smoke:/tmp/normal-video-output.mp4
+          docker exec --interactive smp-smoke sh -c \
+            'cat > /tmp/normal-video-output.mp4' \
+            < "${RUNNER_TEMP}/normal-video-output.mp4"
           docker exec smp-smoke prlimit --as=805306368 -- ffprobe \
             -v error -select_streams v:0 \
             -show_entries stream=codec_name,width,height \

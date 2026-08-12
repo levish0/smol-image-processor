@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/levish0/smol-media-processor/contracts/image-recipe-v1.schema.json",
+  "title": "Image processing recipe v1",
+  "additionalProperties": false,
+  "type": "object",
+  "required": ["schema_version", "animation_policy", "outputs"],
+  "properties": {
+    "schema_version": { "const": 1, "type": "number" },
+    "animation_policy": {
+      "anyOf": [
+        { "const": "reject", "type": "string" },
+        { "const": "preserve", "type": "string" },
+        { "const": "first_frame", "type": "string" }
+      ]
+    },
+    "outputs": {
+      "minProperties": 1,
+      "maxProperties": 8,
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": ["format", "resize", "quality", "effort"],
+          "properties": {
+            "format": { "const": "webp", "type": "string" },
+            "resize": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["mode", "width", "allow_upscale"],
+                  "properties": {
+                    "mode": { "const": "inside", "type": "string" },
+                    "width": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "height": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "allow_upscale": { "const": false, "type": "boolean" }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["mode", "height", "allow_upscale"],
+                  "properties": {
+                    "mode": { "const": "inside", "type": "string" },
+                    "width": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "height": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "allow_upscale": { "const": false, "type": "boolean" }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": ["mode", "width", "height", "allow_upscale"],
+                  "properties": {
+                    "mode": { "const": "cover", "type": "string" },
+                    "width": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "height": {
+                      "minimum": 1,
+                      "maximum": 8192,
+                      "type": "integer"
+                    },
+                    "allow_upscale": { "const": false, "type": "boolean" }
+                  }
+                }
+              ]
+            },
+            "quality": { "minimum": 1, "maximum": 100, "type": "integer" },
+            "effort": { "minimum": 0, "maximum": 6, "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}

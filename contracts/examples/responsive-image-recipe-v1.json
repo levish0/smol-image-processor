@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "animation_policy": "reject",
+  "outputs": {
+    "small": {
+      "format": "webp",
+      "resize": {
+        "mode": "inside",
+        "width": 320,
+        "allow_upscale": false
+      },
+      "quality": 85,
+      "effort": 4
+    },
+    "medium": {
+      "format": "webp",
+      "resize": {
+        "mode": "inside",
+        "width": 800,
+        "allow_upscale": false
+      },
+      "quality": 85,
+      "effort": 4
+    },
+    "large": {
+      "format": "webp",
+      "resize": {
+        "mode": "inside",
+        "width": 1600,
+        "allow_upscale": false
+      },
+      "quality": 85,
+      "effort": 4
+    }
+  }
+}

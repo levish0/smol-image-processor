@@ -1,46 +1,48 @@
 const INTEGER_ENV_PATTERN = /^[+-]?\d+$/;
 
-export function readPositiveInt(name: string, fallback: number): number {
-  const parsed = readIntegerEnv(name);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 export function readBoundedInt(
   name: string,
   fallback: number,
   min: number,
   max: number,
+  environment: NodeJS.ProcessEnv = process.env,
 ): number {
-  const parsed = readIntegerEnv(name);
-  if (!Number.isFinite(parsed)) {
+  const raw = environment[name];
+  if (raw === undefined) {
     return fallback;
   }
-
-  return Math.min(max, Math.max(min, parsed));
+  const parsed = parseInteger(name, raw);
+  if (parsed < min || parsed > max) {
+    throw new Error(`${name} must be an integer in ${min}..=${max}`);
+  }
+  return parsed;
 }
 
 export function readEnumEnv<T extends string>(
   name: string,
   fallback: T,
   allowed: readonly T[],
+  environment: NodeJS.ProcessEnv = process.env,
 ): T {
-  const raw = process.env[name]?.trim();
-  return raw && (allowed as readonly string[]).includes(raw)
-    ? (raw as T)
-    : fallback;
+  const raw = environment[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const normalized = raw.trim();
+  if (!(allowed as readonly string[]).includes(normalized)) {
+    throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
+  }
+  return normalized as T;
 }
 
-function readIntegerEnv(name: string): number {
-  const raw = process.env[name];
-  if (!raw) {
-    return Number.NaN;
-  }
-
+function parseInteger(name: string, raw: string): number {
   const normalized = raw.trim();
   if (!INTEGER_ENV_PATTERN.test(normalized)) {
-    return Number.NaN;
+    throw new Error(`${name} must be an integer`);
   }
-
   const parsed = Number(normalized);
-  return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${name} must be a safe integer`);
+  }
+  return parsed;
 }

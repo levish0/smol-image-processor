@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/levish0/smol-media-processor/contracts/problem-v1.schema.json",
+  "title": "Media processor problem response v1",
+  "anyOf": [
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/invalid_request",
+          "type": "string"
+        },
+        "status": { "const": 400, "type": "number" },
+        "code": { "const": "invalid_request", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/limit_exceeded",
+          "type": "string"
+        },
+        "status": { "const": 413, "type": "number" },
+        "code": { "const": "limit_exceeded", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/unsupported_media_type",
+          "type": "string"
+        },
+        "status": { "const": 415, "type": "number" },
+        "code": { "const": "unsupported_media_type", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/unsupported_format",
+          "type": "string"
+        },
+        "status": { "const": 415, "type": "number" },
+        "code": { "const": "unsupported_format", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/invalid_image",
+          "type": "string"
+        },
+        "status": { "const": 422, "type": "number" },
+        "code": { "const": "invalid_image", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/invalid_video",
+          "type": "string"
+        },
+        "status": { "const": 422, "type": "number" },
+        "code": { "const": "invalid_video", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/animation_not_allowed",
+          "type": "string"
+        },
+        "status": { "const": 422, "type": "number" },
+        "code": { "const": "animation_not_allowed", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/processing_failed",
+          "type": "string"
+        },
+        "status": { "const": 422, "type": "number" },
+        "code": { "const": "processing_failed", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/processor_overloaded",
+          "type": "string"
+        },
+        "status": { "const": 503, "type": "number" },
+        "code": { "const": "processor_overloaded", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/processor_unavailable",
+          "type": "string"
+        },
+        "status": { "const": 503, "type": "number" },
+        "code": { "const": "processor_unavailable", "type": "string" }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["title", "type", "status", "code"],
+      "properties": {
+        "title": { "minLength": 1, "maxLength": 256, "type": "string" },
+        "type": {
+          "const": "https://github.com/levish0/smol-media-processor/problems/internal_error",
+          "type": "string"
+        },
+        "status": { "const": 500, "type": "number" },
+        "code": { "const": "internal_error", "type": "string" }
+      }
+    }
+  ]
+}

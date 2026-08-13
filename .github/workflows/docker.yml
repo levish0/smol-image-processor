@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           cleanup() {
-            docker rm -f smp-smoke smp-tiny-tmp smp-no-egress >/dev/null 2>&1 || true
+            docker rm -f smp-smoke smp-custom-limit smp-invalid-limit smp-tiny-tmp smp-no-egress >/dev/null 2>&1 || true
             docker network rm smp-smoke-net >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
@@ -85,6 +85,7 @@ jobs:
             --pids-limit 128 \
             --network smp-smoke-net \
             --env PROCESSING_CONCURRENCY=1 \
+            --env FFMPEG_ADDRESS_SPACE_LIMIT_BYTES=805306368 \
             --publish 127.0.0.1:16701:6701 \
             "${LOCAL_IMAGE}"
           for attempt in $(seq 1 30); do
@@ -99,6 +100,56 @@ jobs:
             fi
             sleep 1
           done
+          jq --exit-status \
+            '.ffmpeg_address_space_limit_bytes == 805306368' \
+            "${RUNNER_TEMP}/health.json" >/dev/null
+
+          docker run --detach --name smp-custom-limit \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 2g \
+            --cpus 1 \
+            --pids-limit 128 \
+            --network none \
+            --env FFMPEG_ADDRESS_SPACE_LIMIT_BYTES=1073741824 \
+            "${LOCAL_IMAGE}"
+          for attempt in $(seq 1 30); do
+            if docker exec smp-custom-limit bun -e '
+              const response=await fetch("http://127.0.0.1:6701/health");
+              const health=await response.json();
+              process.exit(response.ok &&
+                health.ffmpeg_address_space_limit_bytes===1073741824 ? 0 : 1);
+            ' >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs smp-custom-limit
+              exit 1
+            fi
+            sleep 1
+          done
+          docker rm -f smp-custom-limit >/dev/null
+
+          if docker run --name smp-invalid-limit \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m,mode=1777 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 2g \
+            --cpus 1 \
+            --pids-limit 128 \
+            --network none \
+            --env FFMPEG_ADDRESS_SPACE_LIMIT_BYTES=not-a-number \
+            "${LOCAL_IMAGE}"; then
+            echo "malformed FFmpeg address-space profile unexpectedly started"
+            exit 1
+          fi
+          docker logs smp-invalid-limit 2>&1 \
+            | grep 'FFMPEG_ADDRESS_SPACE_LIMIT_BYTES must be an integer'
+          docker rm -f smp-invalid-limit >/dev/null
+
           curl --fail-with-body --silent --show-error \
             --dump-header "${RUNNER_TEMP}/single-headers.txt" \
             --output "${RUNNER_TEMP}/single-response.bin" \

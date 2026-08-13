@@ -37,7 +37,7 @@ export const PROCESSOR_POLICY_V1 = {
     max_frame_rate: 60,
     max_decode_pixels: 20_000_000_000,
     max_decoder_working_set_bytes: 192 * 1024 * 1024,
-    max_child_address_space_bytes: 768 * 1024 * 1024,
+    default_child_address_space_bytes: 768 * 1024 * 1024,
     max_output_dimension: 1920,
     max_deadline_ms: 180_000,
     allowed_presets: ["ultrafast", "superfast", "veryfast"],

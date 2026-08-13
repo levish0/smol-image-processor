@@ -20,3 +20,4 @@ Use `memory/TEMPLATE.md`. Keep entries concise but complete enough to resume imp
 - [2026-06-05 0.1.1](2026-06-05-0.1.1.md)
 - [2026-06-05 CI Docker Package](2026-06-05-ci-docker-package.md)
 - [2026-06-22 0.2.0 Video Support + Rename](2026-06-22-0.2.0-video.md)
+- [2026-08-13 0.3.0 Multi-Output Contract](2026-08-13-0.3.0-multi-output-contract.md)

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/levish0/smol-media-processor/contracts/image-manifest-v1.schema.json",
+  "title": "Image processing manifest v1",
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "input_digest",
+    "recipe_digest",
+    "build_fingerprint",
+    "source",
+    "outputs"
+  ],
+  "properties": {
+    "schema_version": { "const": 1, "type": "number" },
+    "kind": { "const": "image", "type": "string" },
+    "input_digest": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "const": "sha-256", "type": "string" },
+        "value": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      }
+    },
+    "recipe_digest": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "const": "sha-256", "type": "string" },
+        "value": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+      }
+    },
+    "build_fingerprint": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "processor_version",
+        "sharp_version",
+        "libvips_version",
+        "platform",
+        "architecture",
+        "policy_digest"
+      ],
+      "properties": {
+        "processor_version": {
+          "minLength": 1,
+          "maxLength": 64,
+          "type": "string"
+        },
+        "sharp_version": { "minLength": 1, "maxLength": 64, "type": "string" },
+        "libvips_version": {
+          "minLength": 1,
+          "maxLength": 64,
+          "type": "string"
+        },
+        "platform": { "minLength": 1, "maxLength": 64, "type": "string" },
+        "architecture": { "minLength": 1, "maxLength": 64, "type": "string" },
+        "policy_digest": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": ["algorithm", "value"],
+          "properties": {
+            "algorithm": { "const": "sha-256", "type": "string" },
+            "value": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+          }
+        }
+      }
+    },
+    "source": {
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "format",
+        "width",
+        "height",
+        "animated",
+        "pages",
+        "orientation",
+        "metadata"
+      ],
+      "properties": {
+        "format": {
+          "anyOf": [
+            { "const": "jpeg", "type": "string" },
+            { "const": "png", "type": "string" },
+            { "const": "gif", "type": "string" },
+            { "const": "webp", "type": "string" }
+          ]
+        },
+        "width": { "minimum": 1, "type": "integer" },
+        "height": { "minimum": 1, "type": "integer" },
+        "animated": { "type": "boolean" },
+        "pages": { "minimum": 1, "type": "integer" },
+        "orientation": {
+          "anyOf": [
+            { "minimum": 1, "maximum": 8, "type": "integer" },
+            { "type": "null" }
+          ]
+        },
+        "metadata": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": ["extraction_version", "fields"],
+          "properties": {
+            "extraction_version": { "const": 1, "type": "number" },
+            "fields": {
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": ["name", "value", "sensitivity"],
+                "properties": {
+                  "name": { "minLength": 1, "maxLength": 64, "type": "string" },
+                  "value": {
+                    "anyOf": [
+                      { "maxLength": 512, "type": "string" },
+                      { "type": "number" },
+                      {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": { "type": "number" }
+                      }
+                    ]
+                  },
+                  "sensitivity": { "const": "restricted", "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "outputs": {
+      "minProperties": 1,
+      "maxProperties": 8,
+      "additionalProperties": false,
+      "type": "object",
+      "patternProperties": {
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "mime_type",
+            "extension",
+            "byte_length",
+            "width",
+            "height",
+            "animated",
+            "pages",
+            "digest"
+          ],
+          "properties": {
+            "mime_type": { "const": "image/webp", "type": "string" },
+            "extension": { "const": "webp", "type": "string" },
+            "byte_length": { "minimum": 1, "type": "integer" },
+            "width": { "minimum": 1, "type": "integer" },
+            "height": { "minimum": 1, "type": "integer" },
+            "animated": { "type": "boolean" },
+            "pages": { "minimum": 1, "type": "integer" },
+            "digest": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": ["algorithm", "value"],
+              "properties": {
+                "algorithm": { "const": "sha-256", "type": "string" },
+                "value": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

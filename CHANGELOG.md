@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-13
+
+### Added
+
+- Operator-owned `FFMPEG_ADDRESS_SPACE_LIMIT_BYTES` configuration with strict
+  positive safe-integer startup validation.
+- Health diagnostics for the effective child address-space fence.
+- Unit and hardened-container coverage for the default profile, a larger valid
+  operator value, malformed values, and startup rejection.
+
+### Changed
+
+- The existing 768 MiB ffmpeg/ffprobe address-space fence is now the reviewed
+  default rather than a universal compiled maximum. Container RAM and swap
+  remain deployment-orchestrator settings rather than processor configuration.
+
 ## [0.3.0] - 2026-08-13
 
 ### Added

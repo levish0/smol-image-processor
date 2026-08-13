@@ -35,6 +35,7 @@ export function createApp(
       service: "smol-media-processor",
       schema_version: 1,
       build_fingerprint: BUILD_FINGERPRINT,
+      ffmpeg_address_space_limit_bytes: config.video.maxChildAddressSpaceBytes,
     }))
     .post(
       "/v1/images/process",

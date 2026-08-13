@@ -97,9 +97,10 @@ upscale, and source/global/stream/chapter metadata removed.
 ffprobe admission checks codec, 8-bit 4:2:0 pixel format, duration, input
 dimensions, frame rate, total decode-pixel amplification, and a conservative
 192 MiB decoder/reference/filter working-set budget. ffmpeg and ffprobe run
-under a compiled 768 MiB child address-space fence in addition to the container
-memory limit. ffmpeg also uses bounded diagnostics, threads, deadline, and an
-output-file hard ceiling. The result is
+under an operator-selected child address-space fence in addition to the
+container memory limit. The reviewed default is 768 MiB. ffmpeg also uses
+bounded diagnostics, threads, deadline, and an output-file hard ceiling. The
+result is
 stat-checked before it is read into memory, then probed again before publication.
 
 Image and video routes stay separate so an image caller cannot accidentally
@@ -155,9 +156,10 @@ development and unit-test convenience, not a supported production profile.
 
 ## Resource limits
 
-Reviewed defaults are compiled in. A present environment value may reduce a
-ceiling but cannot expand it. Malformed, non-positive, or out-of-range values
-fail startup instead of falling back or clamping.
+Reviewed defaults are compiled in. Except for the explicitly operator-owned
+FFmpeg address-space profile, a present environment value may reduce a ceiling
+but cannot expand it. Malformed, non-positive, or out-of-range values fail
+startup instead of falling back or clamping.
 
 | Name                                  |        Default |                            Hard maximum |
 | ------------------------------------- | -------------: | --------------------------------------: |
@@ -186,6 +188,7 @@ fail startup instead of falling back or clamping.
 | `MAX_VIDEO_FRAME_RATE`                |             60 |                                      60 |
 | `MAX_VIDEO_DECODE_PIXELS`             | 20,000,000,000 |                          20,000,000,000 |
 | `MAX_VIDEO_DECODER_WORKING_SET_BYTES` |    201,326,592 |                             201,326,592 |
+| `FFMPEG_ADDRESS_SPACE_LIMIT_BYTES`    |    805,306,368 |                   positive safe integer |
 | `MAX_VIDEO_DIMENSION`                 |          1,920 |                                   1,920 |
 | `VIDEO_PROCESSING_DEADLINE_SECONDS`   |            150 |                                     180 |
 | `VIDEO_CRF`                           |             23 |                                   0..51 |
@@ -195,6 +198,12 @@ fail startup instead of falling back or clamping.
 `PROCESSING_CONCURRENCY * ENCODER_CONCURRENCY` may not exceed four.
 `MAX_*_REQUEST_BYTES` must still fit the selected logical limits plus multipart
 overhead.
+
+`FFMPEG_ADDRESS_SPACE_LIMIT_BYTES` is a deployment setting, not a request or
+recipe field. It controls each ffmpeg/ffprobe child's virtual address-space
+fence and may be set above or below the reviewed 768 MiB default. It does not
+configure container RAM or swap and does not promise that every possible video
+will fit. The operator owns the matching Docker/Kubernetes memory profile.
 
 ## Docker
 
@@ -213,6 +222,7 @@ docker run --rm --name smol-media-processor \
   --cpus 2 \
   --pids-limit 128 \
   --network smp-private \
+  --env FFMPEG_ADDRESS_SPACE_LIMIT_BYTES=805306368 \
   smol-media-processor
 ```
 
@@ -227,17 +237,20 @@ Deploy privately, without object-store credentials or outbound network access.
 
 The reviewed deployment profile requires a 2 GiB container memory limit. It is
 an operator-owned runtime setting, not an API input. Giving the container more
-memory does not expand the compiled request or processing ceilings; deployments
-below 2 GiB are outside the supported profile. The child address-space fence is
-compiled into the processor so an individual ffmpeg/ffprobe invocation cannot
-consume the full container envelope.
+memory does not automatically expand request or processing ceilings; the
+operator must also select the FFmpeg address-space fence appropriate for that
+deployment. Deployments below 2 GiB are outside the tested profile.
 
-The 2 GiB profile is deliberately larger than the 768 MiB child address-space
-fence. During video processing the Bun process can still hold the bounded input
-while `/tmp` contains the bounded input and output objects. The remaining
-envelope keeps the HTTP server and health endpoint alive if the child reaches
-its own resource fence. This is a supported deployment minimum, not a tunable
-media recipe value.
+The 2 GiB default profile is deliberately larger than the 768 MiB child
+address-space fence. During video processing the Bun process can still hold the
+bounded input while `/tmp` contains the bounded input and output objects. The
+remaining envelope keeps the HTTP server and health endpoint alive if the child
+reaches its own resource fence. Child resource exhaustion returns typed 503 and
+cleans up the job; total container OOM remains an infrastructure failure and
+must be handled by the container restart policy and the caller's durable retry.
+
+`GET /health` reports the effective `ffmpeg_address_space_limit_bytes` so the
+deployment can verify its intended setting before opening traffic.
 
 The release smoke sends an exact-maximum 100 MiB video through the real HTTP
 route under this profile, checks the cgroup peak remains below the container

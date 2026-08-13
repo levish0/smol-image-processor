@@ -1,6 +1,6 @@
 {
   "name": "smol-media-processor",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Bounded Bun/Elysia helper for versioned multi-output image recipes and explicit video normalization.",
   "author": "Levi Laine <levi.laine.me@gmail.com>",
   "repository": "https://github.com/levish0/smol-media-processor",

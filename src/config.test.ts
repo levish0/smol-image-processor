@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { loadProcessorConfig, PROCESSOR_HARD_LIMITS } from "./config";
 import { IMAGE_HARD_LIMITS } from "./image";
-import { VIDEO_HARD_LIMITS } from "./video";
+import { VIDEO_DEFAULTS, VIDEO_HARD_LIMITS } from "./video";
 
 describe("loadProcessorConfig", () => {
   test("uses reviewed compiled defaults when variables are absent", () => {
@@ -11,7 +11,7 @@ describe("loadProcessorConfig", () => {
     expect(config.serverIdleTimeoutSeconds).toBe(155);
     expect(config.image.maxInputBytes).toBe(IMAGE_HARD_LIMITS.maxInputBytes);
     expect(config.video.maxChildAddressSpaceBytes).toBe(
-      VIDEO_HARD_LIMITS.maxChildAddressSpaceBytes,
+      VIDEO_DEFAULTS.maxChildAddressSpaceBytes,
     );
   });
 
@@ -56,6 +56,21 @@ describe("loadProcessorConfig", () => {
     expect(() => loadProcessorConfig({ VIDEO_PRESET: "medium" })).toThrow(
       "VIDEO_PRESET must be one of",
     );
+    expect(() =>
+      loadProcessorConfig({ FFMPEG_ADDRESS_SPACE_LIMIT_BYTES: "768MiB" }),
+    ).toThrow("FFMPEG_ADDRESS_SPACE_LIMIT_BYTES must be an integer");
+    expect(() =>
+      loadProcessorConfig({ FFMPEG_ADDRESS_SPACE_LIMIT_BYTES: "0" }),
+    ).toThrow("FFMPEG_ADDRESS_SPACE_LIMIT_BYTES must be an integer in");
+  });
+
+  test("uses the operator-selected child address-space limit", () => {
+    const selected = 8 * 1024 * 1024 * 1024;
+    expect(
+      loadProcessorConfig({
+        FFMPEG_ADDRESS_SPACE_LIMIT_BYTES: String(selected),
+      }).video.maxChildAddressSpaceBytes,
+    ).toBe(selected);
   });
 
   test("keeps the global encoder ceiling across admitted requests", () => {

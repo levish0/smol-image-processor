@@ -262,7 +262,13 @@ function loadVideoOptions(environment: NodeJS.ProcessEnv): VideoOptions {
       VIDEO_HARD_LIMITS.maxDecoderWorkingSetBytes,
       environment,
     ),
-    maxChildAddressSpaceBytes: VIDEO_HARD_LIMITS.maxChildAddressSpaceBytes,
+    maxChildAddressSpaceBytes: readBoundedInt(
+      "FFMPEG_ADDRESS_SPACE_LIMIT_BYTES",
+      VIDEO_DEFAULTS.maxChildAddressSpaceBytes,
+      1,
+      Number.MAX_SAFE_INTEGER,
+      environment,
+    ),
     maxDimension: bounded(
       "MAX_VIDEO_DIMENSION",
       VIDEO_DEFAULTS.maxDimension,

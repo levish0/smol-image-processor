@@ -151,7 +151,7 @@ function probe(buffer: Buffer): {
 }
 
 describe("processVideo", () => {
-  test("runs ffmpeg and ffprobe under the fixed child address-space fence", () => {
+  test("runs ffmpeg and ffprobe under the selected child address-space fence", () => {
     expect(
       buildAddressSpaceLimitedCommand(
         "ffmpeg",

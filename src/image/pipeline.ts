@@ -1,11 +1,15 @@
 import sharp, { type OutputInfo } from "sharp";
-import { BUILD_FINGERPRINT } from "./build-info";
-import { sha256Digest } from "./canonical-json";
-import type { ImageManifestV1 } from "./contracts";
-import { createDeadline } from "./deadline";
-import { detectMediaKind } from "./detect";
-import { MediaProcessingError, throwIfProcessingAborted } from "./errors";
-import { PROCESSOR_POLICY_V1 } from "./policy";
+import { BUILD_FINGERPRINT } from "../config/build-info";
+import { sha256Digest } from "../shared/canonical-json";
+import type { ImageManifestV1 } from "../contracts/schemas";
+import { createDeadline } from "../shared/deadline";
+import { detectMediaKind } from "../shared/detect";
+import {
+  MediaProcessingError,
+  throwIfProcessingAborted,
+} from "../shared/errors";
+import { logger } from "../shared/logger";
+import { PROCESSOR_POLICY_V1 } from "../config/policy";
 import type { ImageOutputRecipe, ImageRecipe } from "./recipe";
 import {
   extractSourceMetadata,
@@ -510,18 +514,24 @@ async function renderOutput(
       );
     }
     const bytes = Buffer.concat(chunks, Number(outputBytes));
-    const pages = info.pages ?? outputPages;
-    const height = info.pageHeight ?? info.height;
+    // `info.pages` is the page count of the pipeline *input*, not of the
+    // encoded file: the animated WebP encoder may merge consecutive identical
+    // frames, so the encoded page count can legitimately be smaller.
+    const expectedPages = info.pages ?? outputPages;
+    const frameHeight = info.pageHeight ?? info.height;
     assertBudget(
-      multiplyBigInt(info.width, height, pages),
+      multiplyBigInt(info.width, frameHeight, expectedPages),
       options.maxOutputPixels,
       `Output ${recipe.outputId} exceeds the pixel limit`,
     );
-    await verifySanitizedOutput(
+    const verified = await verifySanitizedOutput(
       bytes,
-      info.width,
-      height,
-      pages,
+      {
+        outputId: recipe.outputId,
+        width: info.width,
+        frameHeight,
+        maxPages: expectedPages,
+      },
       options.deadlineMilliseconds,
       signal,
     );
@@ -533,10 +543,10 @@ async function renderOutput(
         mime_type: "image/webp",
         extension: "webp",
         byte_length: bytes.length,
-        width: info.width,
-        height,
-        animated: pages > 1,
-        pages,
+        width: verified.width,
+        height: verified.frameHeight,
+        animated: verified.pages > 1,
+        pages: verified.pages,
         digest: sha256Digest(bytes),
       },
     };
@@ -552,15 +562,41 @@ async function renderOutput(
   }
 }
 
+type OutputContract = {
+  outputId: string;
+  width: number;
+  frameHeight: number;
+  /** Page count fed to the encoder; the encoded file may contain fewer. */
+  maxPages: number;
+};
+
+type VerifiedOutput = {
+  width: number;
+  frameHeight: number;
+  pages: number;
+};
+
+/**
+ * Re-open the encoded bytes and confirm they satisfy the serving contract:
+ * WebP, expected geometry, a sane page count, and no embedded metadata.
+ *
+ * The page count is bounded rather than exact because libwebp's animation
+ * encoder merges consecutive frames that are identical (or, for lossy output,
+ * within its quality-derived tolerance) into one frame with the summed delay,
+ * and emits a still image when everything collapses to a single frame. The
+ * caller must therefore take the effective geometry from the returned value.
+ */
 async function verifySanitizedOutput(
   bytes: Buffer,
-  width: number,
-  height: number,
-  pages: number,
+  contract: OutputContract,
   deadlineMilliseconds: number,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<VerifiedOutput> {
   if (detectMediaKind(bytes) !== "image") {
+    logger.warn(
+      { output_id: contract.outputId, byte_length: bytes.length },
+      "Encoder output magic is invalid",
+    );
     throw new MediaProcessingError(
       "processing_failed",
       "Encoder output magic is invalid",
@@ -574,8 +610,12 @@ async function verifySanitizedOutput(
   let metadata: SharpMetadata;
   try {
     metadata = await verifier.metadata();
-  } catch {
+  } catch (error) {
     throwIfProcessingAborted(signal);
+    logger.warn(
+      { output_id: contract.outputId, err: error },
+      "Encoder output cannot be verified",
+    );
     throw new MediaProcessingError(
       "processing_failed",
       "Encoder output cannot be verified",
@@ -584,21 +624,62 @@ async function verifySanitizedOutput(
     signal.removeEventListener("abort", abort);
     verifier.destroy();
   }
-  if (
-    metadata.format !== "webp" ||
-    metadata.width !== width ||
-    sourceFrameHeight(metadata, metadata.pages ?? 1) !== height ||
-    (metadata.pages ?? 1) !== pages ||
-    metadata.exif !== undefined ||
-    metadata.icc !== undefined ||
-    metadata.xmp !== undefined ||
-    metadata.iptc !== undefined
-  ) {
-    throw new MediaProcessingError(
-      "processing_failed",
+
+  const pages = metadata.pages ?? 1;
+  const actual = {
+    format: metadata.format,
+    width: metadata.width,
+    frame_height: sourceFrameHeight(metadata, pages),
+    pages,
+    has_exif: metadata.exif !== undefined,
+    has_icc: metadata.icc !== undefined,
+    has_xmp: metadata.xmp !== undefined,
+    has_iptc: metadata.iptc !== undefined,
+  };
+  const violations: string[] = [];
+  if (actual.format !== "webp") violations.push("format");
+  if (actual.width !== contract.width) violations.push("width");
+  if (actual.frame_height !== contract.frameHeight) violations.push("height");
+  if (pages > contract.maxPages) violations.push("pages");
+  if (actual.has_exif) violations.push("exif");
+  if (actual.has_icc) violations.push("icc");
+  if (actual.has_xmp) violations.push("xmp");
+  if (actual.has_iptc) violations.push("iptc");
+  if (violations.length > 0) {
+    logger.warn(
+      {
+        output_id: contract.outputId,
+        violations,
+        expected: {
+          format: "webp",
+          width: contract.width,
+          frame_height: contract.frameHeight,
+          max_pages: contract.maxPages,
+        },
+        actual,
+      },
       "Encoder output contract verification failed",
     );
+    throw new MediaProcessingError(
+      "processing_failed",
+      `Encoder output contract verification failed (${violations.join(", ")})`,
+    );
   }
+  if (pages < contract.maxPages) {
+    logger.info(
+      {
+        output_id: contract.outputId,
+        input_pages: contract.maxPages,
+        encoded_pages: pages,
+      },
+      "Animated WebP encoder merged consecutive identical frames",
+    );
+  }
+  return {
+    width: contract.width,
+    frameHeight: contract.frameHeight,
+    pages,
+  };
 }
 
 class AggregateByteBudget {
@@ -700,6 +781,9 @@ function normalizeSharpError(
   if (error instanceof MediaProcessingError) {
     return error;
   }
+  // The public problem response stays generic; keep the underlying libvips
+  // diagnostic in the processor log so failures can be triaged in production.
+  logger.warn({ err: error, stage: fallbackMessage }, "Image pipeline error");
   if (
     error instanceof Error &&
     error.message.toLowerCase().includes("pixel limit")

@@ -1,6 +1,6 @@
 import sharp from "sharp";
-import packageJson from "../package.json" with { type: "json" };
-import type { ImageManifestV1 } from "./contracts";
+import packageJson from "../../package.json" with { type: "json" };
+import type { ImageManifestV1 } from "../contracts/schemas";
 import { PROCESSOR_POLICY_DIGEST } from "./policy";
 
 export type BuildFingerprint = ImageManifestV1["build_fingerprint"];

@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import sharp from "sharp";
 import { createApp, type ProcessorDependencies } from "./app";
-import { BUILD_FINGERPRINT } from "./build-info";
-import { canonicalJson, contentDigest } from "./canonical-json";
-import type { ProcessorConfig } from "./config";
-import { IMAGE_DEFAULTS, type ProcessedImageRecipe } from "./image";
-import type { ImageRecipe } from "./recipe";
-import { VIDEO_DEFAULTS } from "./video";
+import { BUILD_FINGERPRINT } from "../config/build-info";
+import { canonicalJson, contentDigest } from "../shared/canonical-json";
+import type { ProcessorConfig } from "../config/config";
+import { IMAGE_DEFAULTS, type ProcessedImageRecipe } from "../image/pipeline";
+import type { ImageRecipe } from "../image/recipe";
+import { VIDEO_DEFAULTS } from "../video/transcode";
 
 const config: ProcessorConfig = {
   port: 6701,

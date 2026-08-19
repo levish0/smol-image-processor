@@ -12,7 +12,7 @@ import {
   resolveVideoDecodeDimensions,
   VIDEO_DEFAULTS,
   type VideoOptions,
-} from "./video";
+} from "./transcode";
 
 const options: VideoOptions = {
   maxInputBytes: 50 * 1024 * 1024,

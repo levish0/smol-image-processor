@@ -5,15 +5,15 @@ import {
   ImageManifestV1Schema,
   ImageRecipeV1Schema,
   ProblemDetailsV1Schema,
-} from "./contracts";
-import { IMAGE_DEFAULTS, processImageRecipe } from "./image";
+} from "./schemas";
+import { IMAGE_DEFAULTS, processImageRecipe } from "../image/pipeline";
 import {
   MAX_IMAGE_RECIPE_BYTES,
   MAX_IMAGE_RECIPE_DIMENSION,
   MAX_IMAGE_RECIPE_OUTPUTS,
   parseImageRecipe,
-} from "./recipe";
-import { problemDetails, PROBLEM_STATUS } from "./errors";
+} from "../image/recipe";
+import { problemDetails, PROBLEM_STATUS } from "../shared/errors";
 
 const contracts = [
   ["image-recipe-v1.schema.json", ImageRecipeV1Schema],
@@ -21,7 +21,7 @@ const contracts = [
   ["problem-v1.schema.json", ProblemDetailsV1Schema],
 ] as const;
 const exampleRecipeUrl = new URL(
-  "../contracts/examples/responsive-image-recipe-v1.json",
+  "../../contracts/examples/responsive-image-recipe-v1.json",
   import.meta.url,
 );
 
@@ -29,7 +29,7 @@ describe("checked v1 contracts", () => {
   test("checked JSON Schemas exactly match their TypeBox source", async () => {
     for (const [filename, source] of contracts) {
       const checked = await Bun.file(
-        new URL(`../contracts/${filename}`, import.meta.url),
+        new URL(`../../contracts/${filename}`, import.meta.url),
       ).json();
       expect(checked).toEqual(
         JSON.parse(
@@ -116,8 +116,8 @@ describe("checked v1 contracts", () => {
 
   test("package and frozen lockfile use the same service identity", async () => {
     const [packageJson, lockfile] = await Promise.all([
-      Bun.file(new URL("../package.json", import.meta.url)).json(),
-      Bun.file(new URL("../bun.lock", import.meta.url)).text(),
+      Bun.file(new URL("../../package.json", import.meta.url)).json(),
+      Bun.file(new URL("../../bun.lock", import.meta.url)).text(),
     ]);
     expect(packageJson.name).toBe("smol-media-processor");
     expect(lockfile).toContain('"name": "smol-media-processor"');

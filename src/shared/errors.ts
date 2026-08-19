@@ -1,4 +1,8 @@
-import type { ProblemCode, ProblemDetailsV1, ProblemStatus } from "./contracts";
+import type {
+  ProblemCode,
+  ProblemDetailsV1,
+  ProblemStatus,
+} from "../contracts/schemas";
 
 export const PROBLEM_STATUS = {
   invalid_request: 400,

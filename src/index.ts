@@ -1,6 +1,7 @@
-import { createApp } from "./app";
-import { loadProcessorConfig } from "./config";
-import { assertRuntimeDependencies } from "./runtime";
+import { createApp } from "./http/app";
+import { loadProcessorConfig } from "./config/config";
+import { logger } from "./shared/logger";
+import { assertRuntimeDependencies } from "./config/runtime";
 
 assertRuntimeDependencies();
 const config = loadProcessorConfig();
@@ -9,4 +10,7 @@ const app = createApp(config).listen({
   idleTimeout: config.serverIdleTimeoutSeconds,
 });
 
-console.log(`Media Processor running at http://localhost:${app.server?.port}`);
+logger.info(
+  { port: app.server?.port, log_level: logger.level },
+  "Media Processor listening",
+);

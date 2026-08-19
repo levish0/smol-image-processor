@@ -3,19 +3,19 @@ import {
   IMAGE_DEFAULTS,
   IMAGE_HARD_LIMITS,
   type ImageProcessingOptions,
-} from "./image";
+} from "../image/pipeline";
 import {
   MAX_IMAGE_RECIPE_BYTES,
   MAX_IMAGE_RECIPE_DIMENSION,
   MAX_IMAGE_RECIPE_OUTPUTS,
   type RecipeLimits,
-} from "./recipe";
+} from "../image/recipe";
 import {
   VIDEO_DEFAULTS,
   VIDEO_HARD_LIMITS,
   VIDEO_PRESETS,
   type VideoOptions,
-} from "./video";
+} from "../video/transcode";
 import { PROCESSOR_POLICY_V1 } from "./policy";
 
 const MULTIPART_OVERHEAD_ALLOWANCE = 64 * 1024;

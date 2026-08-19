@@ -138,7 +138,9 @@ async function expectPreservedOutputs(input: Buffer): Promise<void> {
   }
 }
 
-async function expectManifestMatchesEncodedOutputs(input: Buffer): Promise<void> {
+async function expectManifestMatchesEncodedOutputs(
+  input: Buffer,
+): Promise<void> {
   const processed = await processImageRecipe(input, preserveRecipe(), options);
   expect(processed.manifest.source).toMatchObject({
     animated: true,

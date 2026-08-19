@@ -140,6 +140,7 @@ async function expectPreservedOutputs(input: Buffer): Promise<void> {
 
 async function expectManifestMatchesEncodedOutputs(
   input: Buffer,
+  expectedOutputPages: number,
 ): Promise<void> {
   const processed = await processImageRecipe(input, preserveRecipe(), options);
   expect(processed.manifest.source).toMatchObject({
@@ -156,19 +157,18 @@ async function expectManifestMatchesEncodedOutputs(
     const pages = metadata.pages ?? 1;
     const pageHeight = metadata.pageHeight ?? metadata.height;
 
-    expect(pages).toBeGreaterThanOrEqual(1);
-    expect(pages).toBeLessThanOrEqual(FRAME_COUNT);
+    expect(pages).toBe(expectedOutputPages);
     expect(metadata.width).toBe(FRAME_WIDTH);
     expect(pageHeight).toBe(FRAME_HEIGHT);
-    expect(metadata.height).toBe(FRAME_HEIGHT * pages);
+    expect(metadata.height).toBe(FRAME_HEIGHT * expectedOutputPages);
     expect(output.manifest).toMatchObject({
-      animated: pages > 1,
-      pages,
+      animated: expectedOutputPages > 1,
+      pages: expectedOutputPages,
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
     });
-    if (pages > 1) {
-      expect(metadata.delay).toHaveLength(pages);
+    if (expectedOutputPages > 1) {
+      expect(metadata.delay).toHaveLength(expectedOutputPages);
       expect(metadata.loop).toBe(0);
     } else {
       expect(metadata.delay).toBeUndefined();
@@ -197,8 +197,9 @@ describe("large animated image regression", () => {
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
     });
-    expect(directMetadata.pages ?? 1).toBe(1);
+    const expectedOutputPages = directMetadata.pages ?? 1;
+    expect(expectedOutputPages).toBe(1);
 
-    await expectManifestMatchesEncodedOutputs(input);
+    await expectManifestMatchesEncodedOutputs(input, expectedOutputPages);
   });
 });

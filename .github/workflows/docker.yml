@@ -369,7 +369,7 @@ jobs:
 
     steps:
       - name: Download the exact tested image
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: release-candidate-image
           path: ${{ runner.temp }}

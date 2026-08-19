@@ -23,29 +23,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Format working tree
-        run: bun run fmt
-
       - name: Check contracts, formatting, types, tests, and build
         run: bun run check
-
-      - name: Package local test toolchain
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/smp-local
-          cp "$(command -v bun)" /tmp/smp-local/bun
-          cp -a node_modules /tmp/smp-local/node_modules
-          tar --exclude=.git --exclude=node_modules --exclude=dist \
-            -czf /tmp/smp-local/source.tgz .
-          tar -C /tmp/smp-local -czf /tmp/smp-local-toolchain.tgz \
-            bun node_modules source.tgz
-
-      - name: Upload local test toolchain
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: local-test-toolchain
-          path: /tmp/smp-local-toolchain.tgz
-          retention-days: 1

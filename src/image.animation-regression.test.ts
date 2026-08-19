@@ -137,9 +137,7 @@ async function expectPreservedOutputs(
     expect(pageHeight).toBe(FRAME_HEIGHT);
     expect(metadata.height).toBe(FRAME_HEIGHT * expectedOutputPages);
     if (expectedOutputPages > 1) {
-      expect(metadata.delay).toEqual(
-        Array(FRAME_COUNT).fill(FRAME_DELAY_MS),
-      );
+      expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
       expect(metadata.loop).toBe(0);
     } else {
       expect(metadata.delay).toBeUndefined();

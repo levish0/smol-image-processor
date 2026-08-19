@@ -1,0 +1,47 @@
+name: Apply PR 25 validation fix v2
+
+on:
+  push:
+    branches:
+      - fix/animated-raw-fanout-logging
+    paths:
+      - .github/workflows/apply-pr25-fix-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/animated-raw-fanout-logging
+          fetch-depth: 0
+
+      - name: Apply focused patch
+        run: python3 .github/apply-pr25-fix.py
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format and validate the focused change
+        run: |
+          bunx prettier --write src/image.ts src/image.animation-regression.test.ts
+          bun run typecheck
+          bun test src/image.animation-regression.test.ts
+
+      - name: Commit the fix to the PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/image.ts src/image.animation-regression.test.ts
+          git diff --cached --check
+          git commit -m "fix: verify coalesced animation outputs"
+          git push origin HEAD:fix/animated-raw-fanout-logging

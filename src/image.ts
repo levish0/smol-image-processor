@@ -510,8 +510,14 @@ async function renderOutput(
       );
     }
     const bytes = Buffer.concat(chunks, Number(outputBytes));
-    const pages = info.pages ?? outputPages;
+    const pages = info.pages ?? 1;
     const height = info.pageHeight ?? info.height;
+    if (!Number.isInteger(pages) || pages < 1 || pages > outputPages) {
+      throw new MediaProcessingError(
+        "processing_failed",
+        "Image encoder reported an invalid output page count",
+      );
+    }
     assertBudget(
       multiplyBigInt(info.width, height, pages),
       options.maxOutputPixels,

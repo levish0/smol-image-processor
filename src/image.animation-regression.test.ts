@@ -97,7 +97,7 @@ function preserveRecipe() {
 }
 
 describe("large animated image regression", () => {
-  test("renders all wiki-file variants above the raw stacked-height boundary", async () => {
+  test("renders four responsive variants above the raw stacked-height boundary", async () => {
     const input = await largeAnimatedGif();
 
     const direct = await sharp(input, {

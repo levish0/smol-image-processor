@@ -78,8 +78,11 @@ large job.
 Animation policy is explicit:
 
 - `reject`: animated sources fail.
-- `preserve`: all frames and timing are retained within page, duration, raw,
-  pixel, byte, and deadline budgets.
+- `preserve`: equivalent visual animation semantics are retained within page,
+  duration, raw, pixel, byte, and deadline budgets. The WebP encoder may
+  coalesce redundant frames; each output manifest reports the serialized WebP
+  page count while admission and preflight budgets still use the source frame
+  count.
 - `first_frame`: only frame zero is decoded and emitted; the manifest still
   reports the source as animated.
 

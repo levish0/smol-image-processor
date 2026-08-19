@@ -59,7 +59,10 @@ async function largeAnimatedGif(): Promise<Buffer> {
   );
 
   return sharp(frames, { join: { animated: true } })
-    .gif({ delay: Array(FRAME_COUNT).fill(FRAME_DELAY_MS), loop: 0 })
+    .gif({
+      delay: Array(FRAME_COUNT).fill(FRAME_DELAY_MS),
+      loop: 0,
+    })
     .toBuffer();
 }
 

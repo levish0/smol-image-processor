@@ -436,6 +436,12 @@ async function renderOutputs(
   }
 }
 
+type VerifiedImageOutput = {
+  width: number;
+  height: number;
+  pages: number;
+};
+
 async function renderOutput(
   raw: RawBase,
   metadata: SharpMetadata,
@@ -510,26 +516,18 @@ async function renderOutput(
       );
     }
     const bytes = Buffer.concat(chunks, Number(outputBytes));
-    const pages = info.pages ?? 1;
-    const height = info.pageHeight ?? info.height;
-    if (!Number.isInteger(pages) || pages < 1 || pages > outputPages) {
-      throw new MediaProcessingError(
-        "processing_failed",
-        "Image encoder reported an invalid output page count",
-      );
-    }
-    assertBudget(
-      multiplyBigInt(info.width, height, pages),
-      options.maxOutputPixels,
-      `Output ${recipe.outputId} exceeds the pixel limit`,
-    );
-    await verifySanitizedOutput(
+    const verified = await verifySanitizedOutput(
       bytes,
       info.width,
-      height,
-      pages,
+      info.pageHeight ?? info.height,
+      outputPages,
       options.deadlineMilliseconds,
       signal,
+    );
+    assertBudget(
+      multiplyBigInt(verified.width, verified.height, verified.pages),
+      options.maxOutputPixels,
+      `Output ${recipe.outputId} exceeds the pixel limit`,
     );
     return {
       outputId: recipe.outputId,
@@ -539,10 +537,10 @@ async function renderOutput(
         mime_type: "image/webp",
         extension: "webp",
         byte_length: bytes.length,
-        width: info.width,
-        height,
-        animated: pages > 1,
-        pages,
+        width: verified.width,
+        height: verified.height,
+        animated: verified.pages > 1,
+        pages: verified.pages,
         digest: sha256Digest(bytes),
       },
     };
@@ -562,10 +560,10 @@ async function verifySanitizedOutput(
   bytes: Buffer,
   width: number,
   height: number,
-  pages: number,
+  maximumPages: number,
   deadlineMilliseconds: number,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<VerifiedImageOutput> {
   if (detectMediaKind(bytes) !== "image") {
     throw new MediaProcessingError(
       "processing_failed",
@@ -590,11 +588,15 @@ async function verifySanitizedOutput(
     signal.removeEventListener("abort", abort);
     verifier.destroy();
   }
+  const pages = metadata.pages ?? 1;
+  const verifiedHeight = sourceFrameHeight(metadata, pages);
   if (
     metadata.format !== "webp" ||
     metadata.width !== width ||
-    sourceFrameHeight(metadata, metadata.pages ?? 1) !== height ||
-    (metadata.pages ?? 1) !== pages ||
+    verifiedHeight !== height ||
+    !Number.isInteger(pages) ||
+    pages < 1 ||
+    pages > maximumPages ||
     metadata.exif !== undefined ||
     metadata.icc !== undefined ||
     metadata.xmp !== undefined ||
@@ -605,6 +607,7 @@ async function verifySanitizedOutput(
       "Encoder output contract verification failed",
     );
   }
+  return { width, height: verifiedHeight, pages };
 }
 
 class AggregateByteBudget {

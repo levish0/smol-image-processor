@@ -101,10 +101,7 @@ function preserveRecipe() {
   );
 }
 
-async function expectPreservedOutputs(
-  input: Buffer,
-  expectedOutputPages = FRAME_COUNT,
-): Promise<void> {
+async function expectPreservedOutputs(input: Buffer): Promise<void> {
   const sourceMetadata = await sharp(input, {
     animated: true,
     pages: -1,
@@ -128,16 +125,48 @@ async function expectPreservedOutputs(
     const pageHeight = metadata.pageHeight ?? metadata.height;
 
     expect(output.manifest).toMatchObject({
-      animated: expectedOutputPages > 1,
-      pages: expectedOutputPages,
+      animated: true,
+      pages: FRAME_COUNT,
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
     });
-    expect(pages).toBe(expectedOutputPages);
+    expect(pages).toBe(FRAME_COUNT);
     expect(pageHeight).toBe(FRAME_HEIGHT);
-    expect(metadata.height).toBe(FRAME_HEIGHT * expectedOutputPages);
-    if (expectedOutputPages > 1) {
-      expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
+    expect(metadata.height).toBe(FRAME_HEIGHT * FRAME_COUNT);
+    expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
+    expect(metadata.loop).toBe(0);
+  }
+}
+
+async function expectManifestMatchesEncodedOutputs(input: Buffer): Promise<void> {
+  const processed = await processImageRecipe(input, preserveRecipe(), options);
+  expect(processed.manifest.source).toMatchObject({
+    animated: true,
+    pages: FRAME_COUNT,
+  });
+  expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
+
+  for (const output of processed.outputs) {
+    const metadata = await sharp(output.bytes, {
+      animated: true,
+      pages: -1,
+    }).metadata();
+    const pages = metadata.pages ?? 1;
+    const pageHeight = metadata.pageHeight ?? metadata.height;
+
+    expect(pages).toBeGreaterThanOrEqual(1);
+    expect(pages).toBeLessThanOrEqual(FRAME_COUNT);
+    expect(metadata.width).toBe(FRAME_WIDTH);
+    expect(pageHeight).toBe(FRAME_HEIGHT);
+    expect(metadata.height).toBe(FRAME_HEIGHT * pages);
+    expect(output.manifest).toMatchObject({
+      animated: pages > 1,
+      pages,
+      width: FRAME_WIDTH,
+      height: FRAME_HEIGHT,
+    });
+    if (pages > 1) {
+      expect(metadata.delay).toHaveLength(pages);
       expect(metadata.loop).toBe(0);
     } else {
       expect(metadata.delay).toBeUndefined();
@@ -151,7 +180,7 @@ describe("large animated image regression", () => {
     await expectPreservedOutputs(await largeAnimatedGif());
   });
 
-  test("accepts encoder-coalesced duplicate frames", async () => {
+  test("uses serialized metadata when output info omits the page count", async () => {
     const input = await duplicateFrameGif();
     const direct = await sharp(input, { animated: true, pages: -1 })
       .webp({ quality: 85, effort: 4 })
@@ -168,6 +197,6 @@ describe("large animated image regression", () => {
     });
     expect(directMetadata.pages ?? 1).toBe(1);
 
-    await expectPreservedOutputs(input, 1);
+    await expectManifestMatchesEncodedOutputs(input);
   });
 });

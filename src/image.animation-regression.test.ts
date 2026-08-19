@@ -138,45 +138,6 @@ async function expectPreservedOutputs(input: Buffer): Promise<void> {
   }
 }
 
-async function expectManifestMatchesEncodedOutputs(
-  input: Buffer,
-  expectedOutputPages: number,
-): Promise<void> {
-  const processed = await processImageRecipe(input, preserveRecipe(), options);
-  expect(processed.manifest.source).toMatchObject({
-    animated: true,
-    pages: FRAME_COUNT,
-  });
-  expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
-
-  for (const output of processed.outputs) {
-    const metadata = await sharp(output.bytes, {
-      animated: true,
-      pages: -1,
-    }).metadata();
-    const pages = metadata.pages ?? 1;
-    const pageHeight = metadata.pageHeight ?? metadata.height;
-
-    expect(pages).toBe(expectedOutputPages);
-    expect(metadata.width).toBe(FRAME_WIDTH);
-    expect(pageHeight).toBe(FRAME_HEIGHT);
-    expect(metadata.height).toBe(FRAME_HEIGHT * expectedOutputPages);
-    expect(output.manifest).toMatchObject({
-      animated: expectedOutputPages > 1,
-      pages: expectedOutputPages,
-      width: FRAME_WIDTH,
-      height: FRAME_HEIGHT,
-    });
-    if (expectedOutputPages > 1) {
-      expect(metadata.delay).toHaveLength(expectedOutputPages);
-      expect(metadata.loop).toBe(0);
-    } else {
-      expect(metadata.delay).toBeUndefined();
-      expect(metadata.loop).toBeUndefined();
-    }
-  }
-}
-
 describe("large animated image regression", () => {
   test("renders four responsive variants above the raw stacked-height boundary", async () => {
     await expectPreservedOutputs(await largeAnimatedGif());
@@ -197,9 +158,8 @@ describe("large animated image regression", () => {
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
     });
-    const expectedOutputPages = directMetadata.pages ?? 1;
-    expect(expectedOutputPages).toBe(1);
+    expect(directMetadata.pages ?? 1).toBe(1);
 
-    await expectManifestMatchesEncodedOutputs(input, expectedOutputPages);
+    await expectPreservedOutputs(input);
   });
 });

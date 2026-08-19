@@ -23,5 +23,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Show Prettier output for regression test
+        run: |
+          bunx prettier --write src/image.animation-regression.test.ts
+          git diff -- src/image.animation-regression.test.ts
+
       - name: Check contracts, formatting, types, tests, and build
         run: bun run check

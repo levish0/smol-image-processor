@@ -138,12 +138,51 @@ async function expectPreservedOutputs(input: Buffer): Promise<void> {
   }
 }
 
+async function expectManifestMatchesEncodedOutputs(
+  input: Buffer,
+  expectedPages: number,
+): Promise<void> {
+  const processed = await processImageRecipe(input, preserveRecipe(), options);
+  expect(processed.manifest.source).toMatchObject({
+    animated: true,
+    pages: FRAME_COUNT,
+  });
+  expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
+
+  for (const output of processed.outputs) {
+    const metadata = await sharp(output.bytes, {
+      animated: true,
+      pages: -1,
+    }).metadata();
+    const pages = metadata.pages ?? 1;
+    const pageHeight = metadata.pageHeight ?? metadata.height;
+
+    expect(pages).toBe(expectedPages);
+    expect(metadata.width).toBe(FRAME_WIDTH);
+    expect(pageHeight).toBe(FRAME_HEIGHT);
+    expect(metadata.height).toBe(FRAME_HEIGHT * pages);
+    expect(output.manifest).toMatchObject({
+      animated: pages > 1,
+      pages,
+      width: FRAME_WIDTH,
+      height: FRAME_HEIGHT,
+    });
+    if (pages > 1) {
+      expect(metadata.delay).toHaveLength(pages);
+      expect(metadata.loop).toBe(0);
+    } else {
+      expect(metadata.delay).toBeUndefined();
+      expect(metadata.loop).toBeUndefined();
+    }
+  }
+}
+
 describe("large animated image regression", () => {
   test("renders four responsive variants above the raw stacked-height boundary", async () => {
     await expectPreservedOutputs(await largeAnimatedGif());
   });
 
-  test("uses serialized metadata when output info omits the page count", async () => {
+  test("uses serialized metadata when duplicate frames are coalesced", async () => {
     const input = await duplicateFrameGif();
     const direct = await sharp(input, { animated: true, pages: -1 })
       .webp({ quality: 85, effort: 4 })
@@ -152,14 +191,15 @@ describe("large animated image regression", () => {
       animated: true,
       pages: -1,
     }).metadata();
+    const directPages = directMetadata.pages ?? 1;
 
     expect(directMetadata).toMatchObject({
       format: "webp",
       width: FRAME_WIDTH,
       height: FRAME_HEIGHT,
     });
-    expect(directMetadata.pages ?? 1).toBe(1);
+    expect(directPages).toBe(1);
 
-    await expectPreservedOutputs(input);
+    await expectManifestMatchesEncodedOutputs(input, directPages);
   });
 });

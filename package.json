@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@fastify/busboy": "^3.2.0",
-    "@sinclair/typebox": "0.34.49",
+    "@sinclair/typebox": "0.34.52",
     "canonicalize": "4.0.0",
     "elysia": "^1.4.29",
     "exifr": "^7.1.3",

@@ -2,8 +2,11 @@ import Busboy, { type BusboyFileStream } from "@fastify/busboy";
 import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { MediaProcessingError, throwIfProcessingAborted } from "./errors";
-import { contentDigest } from "./canonical-json";
+import {
+  MediaProcessingError,
+  throwIfProcessingAborted,
+} from "../shared/errors";
+import { contentDigest } from "../shared/canonical-json";
 
 const MULTIPART_HEADER_BYTES = 8 * 1024;
 

@@ -138,7 +138,7 @@ cancellation. Logical file and multipart envelope limits remain separate.
 
 ## Checked contracts
 
-[`src/contracts.ts`](src/contracts.ts) is the TypeBox source of truth for JSON
+[`src/contracts/schemas.ts`](src/contracts/schemas.ts) is the TypeBox source of truth for JSON
 Schemas and TypeScript wire types. Checked JSON is generated:
 
 ```bash
@@ -166,6 +166,20 @@ tail) are logged with structured fields; problem responses stay generic.
 Production startup is fail-closed on non-Linux platforms or when any of these
 runtime dependencies is unavailable. Direct Windows/macOS execution remains a
 development and unit-test convenience, not a supported production profile.
+
+### Source layout
+
+| Path             | Owns                                                                  |
+| ---------------- | --------------------------------------------------------------------- |
+| `src/index.ts`   | Process bootstrap: runtime preflight, config load, listen.            |
+| `src/http/`      | Elysia app, multipart parsing, request admission gate.                |
+| `src/image/`     | Image recipe parsing, decode/fan-out/encode pipeline, EXIF allowlist. |
+| `src/video/`     | ffprobe/ffmpeg normalization and child-process fencing.               |
+| `src/contracts/` | TypeBox schemas that generate the checked `contracts/*.json`.         |
+| `src/config/`    | Compiled policy, env parsing, operator config, build fingerprint.     |
+| `src/shared/`    | Errors, deadlines, media sniffing, logger, canonical JSON, types.     |
+
+Tests live next to the module they cover (`*.test.ts`).
 
 ## Resource limits
 

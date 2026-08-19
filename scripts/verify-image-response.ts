@@ -4,14 +4,17 @@ import {
   canonicalJson,
   contentDigest,
   sha256Digest,
-} from "../src/canonical-json";
-import { ImageManifestV1Schema, type ImageManifestV1 } from "../src/contracts";
+} from "../src/shared/canonical-json";
+import {
+  ImageManifestV1Schema,
+  type ImageManifestV1,
+} from "../src/contracts/schemas";
 import {
   MAX_IMAGE_RECIPE_BYTES,
   MAX_IMAGE_RECIPE_DIMENSION,
   MAX_IMAGE_RECIPE_OUTPUTS,
   parseImageRecipe,
-} from "../src/recipe";
+} from "../src/image/recipe";
 
 const [headersPath, responsePath, inputPath, recipePath, healthPath] =
   process.argv.slice(2);

@@ -10,7 +10,7 @@
 - Fix the verification, keep the sanitization contract; do not drop the
   decode-once raw fan-out.
 - Use a mature logging library (pino) rather than a hand-rolled logger.
-- Post-fix: `src/` folder restructuring was requested but not yet started.
+- Post-fix: regroup the flat `src/` folder by ownership (done, see below).
 
 ## Implementation Status
 
@@ -18,7 +18,7 @@
   pino logger + `LOG_LEVEL`, structured failure logs, regression tests,
   README/CHANGELOG (`Unreleased`).
 - Partial: none.
-- Not started: `src/` restructuring; version bump/tag for the release.
+- Not started: version bump/tag for the release.
 
 ## Root Cause (verified empirically, sharp 0.35.3 / libvips 8.18.3 / libwebp 1.6.0)
 
@@ -34,6 +34,17 @@
   outputs, which is why only some outputs / some GIFs failed.
 - The issue's 16,383-pixel stacked-height hypothesis was refuted: 81/82/86/100
   unique 200x200 frames round-trip intact through the raw fan-out.
+
+## Source Restructure (after the fix commit `c6c823e`)
+
+- `git mv` only, plus relative-import rewrites; no logic change.
+- `src/http/` app, multipart, concurrency; `src/image/` pipeline (was
+  `image.ts`), recipe, source-metadata; `src/video/` transcode (was
+  `video.ts`); `src/contracts/` schemas (was `contracts.ts`); `src/config/`
+  config, policy, env, build-info, runtime; `src/shared/` errors, deadline,
+  detect, logger, canonical-json, types. Tests moved beside modules
+  (`contract.test.ts` -> `contracts/schemas.test.ts`, its `import.meta.url`
+  paths gained one `../`). `scripts/*.ts` and README paths updated.
 
 ## Major Changes
 
@@ -66,7 +77,7 @@
 
 ## Remaining Work
 
-- Known gaps: `src/` restructuring; decide version (patch `0.3.2` seems right:
+- Known gaps: decide version (patch `0.3.2` seems right:
   no wire change) and move `Unreleased` in CHANGELOG.
 - Risks: callers that assumed `outputs.*.pages == source.pages` for preserved
   animations must read the per-output value.

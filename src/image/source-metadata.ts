@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
-import { MediaProcessingError } from "./errors";
-import type { ImageSourceMetadataV1 } from "./contracts";
+import { MediaProcessingError } from "../shared/errors";
+import type { ImageSourceMetadataV1 } from "../contracts/schemas";
 
 const MAX_METADATA_FIELDS = 32;
 const MAX_METADATA_STRING_BYTES = 512;

@@ -1,4 +1,4 @@
-import { MediaProcessingError } from "./errors";
+import { MediaProcessingError } from "../shared/errors";
 
 export class ConcurrencyGate {
   readonly #capacity: number;

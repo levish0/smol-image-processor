@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Value } from "@sinclair/typebox/value";
-import { ImageRecipeV1Schema } from "./contracts";
+import { ImageRecipeV1Schema } from "../contracts/schemas";
 import { parseImageRecipe, type RecipeLimits } from "./recipe";
 
 const limits: RecipeLimits = {

@@ -7,7 +7,7 @@ import {
   processImageRecipe,
   type ImageProcessingInstrumentation,
   type ImageProcessingOptions,
-} from "./image";
+} from "./pipeline";
 import {
   MAX_IMAGE_RECIPE_BYTES,
   MAX_IMAGE_RECIPE_DIMENSION,

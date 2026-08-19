@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDeadline } from "./deadline";
-import { MediaProcessingError, throwIfProcessingAborted } from "./errors";
-import { logger } from "./logger";
-import { PROCESSOR_POLICY_V1 } from "./policy";
-import type { ProcessedMediaBase } from "./types";
+import { createDeadline } from "../shared/deadline";
+import {
+  MediaProcessingError,
+  throwIfProcessingAborted,
+} from "../shared/errors";
+import { logger } from "../shared/logger";
+import { PROCESSOR_POLICY_V1 } from "../config/policy";
+import type { ProcessedMediaBase } from "../shared/types";
 
 export const VIDEO_PRESETS = PROCESSOR_POLICY_V1.video.allowed_presets;
 

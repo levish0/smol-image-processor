@@ -3,7 +3,7 @@ import {
   ImageManifestV1Schema,
   ImageRecipeV1Schema,
   ProblemDetailsV1Schema,
-} from "../src/contracts";
+} from "../src/contracts/schemas";
 
 const draft = "https://json-schema.org/draft/2020-12/schema";
 

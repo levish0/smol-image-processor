@@ -1,4 +1,4 @@
-import { canonicalJson, sha256Digest } from "./canonical-json";
+import { canonicalJson, sha256Digest } from "../shared/canonical-json";
 
 export const PROCESSOR_POLICY_V1 = {
   schema_version: 1,

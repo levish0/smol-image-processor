@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { loadProcessorConfig, PROCESSOR_HARD_LIMITS } from "./config";
-import { IMAGE_HARD_LIMITS } from "./image";
-import { VIDEO_DEFAULTS, VIDEO_HARD_LIMITS } from "./video";
+import { IMAGE_HARD_LIMITS } from "../image/pipeline";
+import { VIDEO_DEFAULTS, VIDEO_HARD_LIMITS } from "../video/transcode";
 
 describe("loadProcessorConfig", () => {
   test("uses reviewed compiled defaults when variables are absent", () => {

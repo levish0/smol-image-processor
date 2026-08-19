@@ -1,12 +1,15 @@
 import sharp, { type OutputInfo } from "sharp";
-import { BUILD_FINGERPRINT } from "./build-info";
-import { sha256Digest } from "./canonical-json";
-import type { ImageManifestV1 } from "./contracts";
-import { createDeadline } from "./deadline";
-import { detectMediaKind } from "./detect";
-import { MediaProcessingError, throwIfProcessingAborted } from "./errors";
-import { logger } from "./logger";
-import { PROCESSOR_POLICY_V1 } from "./policy";
+import { BUILD_FINGERPRINT } from "../config/build-info";
+import { sha256Digest } from "../shared/canonical-json";
+import type { ImageManifestV1 } from "../contracts/schemas";
+import { createDeadline } from "../shared/deadline";
+import { detectMediaKind } from "../shared/detect";
+import {
+  MediaProcessingError,
+  throwIfProcessingAborted,
+} from "../shared/errors";
+import { logger } from "../shared/logger";
+import { PROCESSOR_POLICY_V1 } from "../config/policy";
 import type { ImageOutputRecipe, ImageRecipe } from "./recipe";
 import {
   extractSourceMetadata,

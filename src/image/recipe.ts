@@ -1,12 +1,15 @@
-import { MediaProcessingError } from "./errors";
+import { MediaProcessingError } from "../shared/errors";
 import { Value } from "@sinclair/typebox/value";
-import { ImageRecipeV1Schema, type ImageRecipeV1Wire } from "./contracts";
+import {
+  ImageRecipeV1Schema,
+  type ImageRecipeV1Wire,
+} from "../contracts/schemas";
 import {
   canonicalJson,
   sha256Digest,
   type Sha256Digest,
-} from "./canonical-json";
-import { PROCESSOR_POLICY_V1 } from "./policy";
+} from "../shared/canonical-json";
+import { PROCESSOR_POLICY_V1 } from "../config/policy";
 import { validate as validateUniqueJsonKeys } from "json-dup-key-validator";
 
 export const MAX_IMAGE_RECIPE_BYTES = PROCESSOR_POLICY_V1.recipe.max_bytes;

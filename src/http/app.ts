@@ -1,17 +1,20 @@
 import { Elysia } from "elysia";
 import { ConcurrencyGate } from "./concurrency";
-import { loadProcessorConfig, type ProcessorConfig } from "./config";
-import { detectMediaKind } from "./detect";
-import { MediaProcessingError, problemDetails } from "./errors";
-import { processImageRecipe, type ProcessedImageRecipe } from "./image";
-import { logger } from "./logger";
+import { loadProcessorConfig, type ProcessorConfig } from "../config/config";
+import { detectMediaKind } from "../shared/detect";
+import { MediaProcessingError, problemDetails } from "../shared/errors";
+import {
+  processImageRecipe,
+  type ProcessedImageRecipe,
+} from "../image/pipeline";
+import { logger } from "../shared/logger";
 import { encodeMultipartRelated, parseMultipartRequest } from "./multipart";
-import { parseImageRecipe } from "./recipe";
-import { processVideo, type ProcessedVideo } from "./video";
-import { createDeadline } from "./deadline";
-import { canonicalJson } from "./canonical-json";
-import { BUILD_FINGERPRINT } from "./build-info";
-import type { ProblemCode } from "./contracts";
+import { parseImageRecipe } from "../image/recipe";
+import { processVideo, type ProcessedVideo } from "../video/transcode";
+import { createDeadline } from "../shared/deadline";
+import { canonicalJson } from "../shared/canonical-json";
+import { BUILD_FINGERPRINT } from "../config/build-info";
+import type { ProblemCode } from "../contracts/schemas";
 
 export type ProcessorDependencies = {
   processImage: typeof processImageRecipe;

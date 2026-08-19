@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   image failures and ffmpeg/ffprobe failures (bounded stderr tail) are logged.
 - Rejected requests are logged with route, problem code, and status.
 
+### Changed
+
+- `src/` is grouped by ownership (`http/`, `image/`, `video/`, `contracts/`,
+  `config/`, `shared/`) with tests beside their modules; no wire, contract, or
+  configuration change.
+
 ## [0.3.1] - 2026-08-13
 
 ### Added

@@ -1,5 +1,5 @@
 import pino, { type Logger } from "pino";
-import { readEnumEnv } from "./env";
+import { readEnumEnv } from "../config/env";
 
 export const LOG_LEVELS = [
   "fatal",

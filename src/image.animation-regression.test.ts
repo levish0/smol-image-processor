@@ -16,19 +16,21 @@ const FRAME_WIDTH = 200;
 const FRAME_HEIGHT = 200;
 const FRAME_COUNT = 86;
 const FRAME_DELAY_MS = 40;
+const OUTPUT_COUNT = 4;
+const ANIMATION_PIXELS = FRAME_WIDTH * FRAME_HEIGHT * FRAME_COUNT;
 
 const options: ImageProcessingOptions = {
   ...IMAGE_DEFAULTS,
   maxInputBytes: 16 * 1024 * 1024,
-  maxInputPixels: FRAME_WIDTH * FRAME_HEIGHT * FRAME_COUNT,
-  maxDecodedBytes: FRAME_WIDTH * FRAME_HEIGHT * FRAME_COUNT * 4,
+  maxInputPixels: ANIMATION_PIXELS,
+  maxDecodedBytes: ANIMATION_PIXELS * 4,
   maxPages: FRAME_COUNT,
   maxAnimationDurationMilliseconds: FRAME_COUNT * FRAME_DELAY_MS,
   maxOutputBytes: 16 * 1024 * 1024,
-  maxAggregateOutputBytes: 16 * 1024 * 1024,
-  maxOutputPixels: FRAME_WIDTH * FRAME_HEIGHT * FRAME_COUNT,
-  maxAggregateOutputPixels: FRAME_WIDTH * FRAME_HEIGHT * FRAME_COUNT,
-  maxConcurrentEncoders: 1,
+  maxAggregateOutputBytes: 64 * 1024 * 1024,
+  maxOutputPixels: ANIMATION_PIXELS,
+  maxAggregateOutputPixels: ANIMATION_PIXELS * OUTPUT_COUNT,
+  maxConcurrentEncoders: 2,
   deadlineMilliseconds: 30_000,
 };
 
@@ -53,9 +55,8 @@ async function largeAnimatedGif(): Promise<Buffer> {
   })
     .png()
     .toBuffer();
-  const frames = Array.from(
-    { length: FRAME_COUNT },
-    (_, index) => (index % 2 === 0 ? first : second),
+  const frames = Array.from({ length: FRAME_COUNT }, (_, index) =>
+    index % 2 === 0 ? first : second,
   );
 
   return sharp(frames, { join: { animated: true } })
@@ -71,18 +72,21 @@ function preserveRecipe() {
     JSON.stringify({
       schema_version: 1,
       animation_policy: "preserve",
-      outputs: {
-        display: {
-          format: "webp",
-          resize: {
-            mode: "inside",
-            width: FRAME_WIDTH,
-            allow_upscale: false,
+      outputs: Object.fromEntries(
+        [320, 640, 1280, 1920].map((width) => [
+          `w${width}`,
+          {
+            format: "webp",
+            resize: {
+              mode: "inside",
+              width,
+              allow_upscale: false,
+            },
+            quality: 85,
+            effort: 4,
           },
-          quality: 85,
-          effort: 0,
-        },
-      },
+        ]),
+      ),
     }),
     {
       maxRecipeBytes: MAX_IMAGE_RECIPE_BYTES,
@@ -93,7 +97,7 @@ function preserveRecipe() {
 }
 
 describe("large animated image regression", () => {
-  test("preserves an animation whose raw stacked height exceeds 16,383 pixels", async () => {
+  test("renders all wiki-file variants above the raw stacked-height boundary", async () => {
     const input = await largeAnimatedGif();
 
     const direct = await sharp(input, {
@@ -102,7 +106,7 @@ describe("large animated image regression", () => {
       limitInputPixels: options.maxInputPixels,
     })
       .resize({ width: FRAME_WIDTH, withoutEnlargement: true })
-      .webp({ quality: 85, effort: 0 })
+      .webp({ quality: 85, effort: 4 })
       .toBuffer();
     const directMetadata = await sharp(direct, {
       animated: true,
@@ -116,22 +120,25 @@ describe("large animated image regression", () => {
       preserveRecipe(),
       options,
     );
-    const output = processed.outputs[0]!;
-    const metadata = await sharp(output.bytes, {
-      animated: true,
-      pages: -1,
-    }).metadata();
+    expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
 
-    expect(output.manifest).toMatchObject({
-      animated: true,
-      pages: FRAME_COUNT,
-      width: FRAME_WIDTH,
-      height: FRAME_HEIGHT,
-    });
-    expect(metadata.pages).toBe(FRAME_COUNT);
-    expect(metadata.pageHeight).toBe(FRAME_HEIGHT);
-    expect(metadata.height).toBe(FRAME_HEIGHT * FRAME_COUNT);
-    expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
-    expect(metadata.loop).toBe(0);
+    for (const output of processed.outputs) {
+      const metadata = await sharp(output.bytes, {
+        animated: true,
+        pages: -1,
+      }).metadata();
+
+      expect(output.manifest).toMatchObject({
+        animated: true,
+        pages: FRAME_COUNT,
+        width: FRAME_WIDTH,
+        height: FRAME_HEIGHT,
+      });
+      expect(metadata.pages).toBe(FRAME_COUNT);
+      expect(metadata.pageHeight).toBe(FRAME_HEIGHT);
+      expect(metadata.height).toBe(FRAME_HEIGHT * FRAME_COUNT);
+      expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
+      expect(metadata.loop).toBe(0);
+    }
   });
 });

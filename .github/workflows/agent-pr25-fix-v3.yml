@@ -1,0 +1,344 @@
+name: Finalize animation verifier fix
+
+on:
+  push:
+    branches:
+      - fix/animated-raw-fanout-logging
+    paths:
+      - .github/workflows/agent-pr25-fix-v3.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr25-animation-verifier-fix-v3
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/animated-raw-fanout-logging
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply verifier fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return text.replace(old, new, 1)
+
+          def replace_regex_once(
+              text: str,
+              pattern: str,
+              replacement: str,
+              label: str,
+          ) -> str:
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              return updated
+
+          image_path = Path("src/image.ts")
+          image = image_path.read_text()
+
+          if "type OutputAnimationExpectation" not in image:
+              helpers = '''type OutputAnimationExpectation = {
+            sourcePages: number;
+            sourceDelays: number[];
+            totalDurationMilliseconds: bigint;
+            loop: number;
+            canCollapseToStatic: boolean;
+          };
+
+          function createOutputAnimationExpectation(
+            raw: RawBase,
+            metadata: SharpMetadata,
+            outputPages: number,
+          ): OutputAnimationExpectation {
+            if (outputPages === 1) {
+              return {
+                sourcePages: 1,
+                sourceDelays: [],
+                totalDurationMilliseconds: 0n,
+                loop: 0,
+                canCollapseToStatic: false,
+              };
+            }
+
+            const delays = metadata.delay;
+            if (!delays || delays.length !== outputPages) {
+              throw new MediaProcessingError(
+                "processing_failed",
+                "Animated image timing metadata changed after validation",
+              );
+            }
+            const sourceDelays = delays.map((delay) => (delay <= 10 ? 100 : delay));
+
+            return {
+              sourcePages: outputPages,
+              sourceDelays,
+              totalDurationMilliseconds: sourceDelays.reduce(
+                (total, delay) => total + BigInt(delay),
+                0n,
+              ),
+              loop: metadata.loop ?? 0,
+              canCollapseToStatic: decodedFramesAreIdentical(raw, outputPages),
+            };
+          }
+
+          function decodedFramesAreIdentical(raw: RawBase, pages: number): boolean {
+            const frameBytes = raw.width * raw.pageHeight * raw.channels;
+            const totalBytes = frameBytes * pages;
+            if (
+              !Number.isSafeInteger(frameBytes) ||
+              !Number.isSafeInteger(totalBytes) ||
+              frameBytes <= 0 ||
+              totalBytes !== raw.bytes.length
+            ) {
+              throw new MediaProcessingError(
+                "processing_failed",
+                "Decoded animation buffer geometry is invalid",
+              );
+            }
+
+            const first = raw.bytes.subarray(0, frameBytes);
+            for (let page = 1; page < pages; page += 1) {
+              const offset = page * frameBytes;
+              if (!first.equals(raw.bytes.subarray(offset, offset + frameBytes))) {
+                return false;
+              }
+            }
+            return true;
+          }
+
+          '''
+              image = replace_once(
+                  image,
+                  "async function renderOutputs(\n",
+                  helpers + "async function renderOutputs(\n",
+                  "insert animation expectation helpers",
+              )
+              image = replace_regex_once(
+                  image,
+                  r"(async function renderOutputs\([\s\S]*?\): Promise<ProcessedImageOutput\[]> \{\n)(  const outputs =)",
+                  r"\1  const animationExpectation = createOutputAnimationExpectation(\n    raw,\n    metadata,\n    outputPages,\n  );\n\2",
+                  "create animation expectation once",
+              )
+              image = replace_regex_once(
+                  image,
+                  r"(await renderOutput\(\n\s+raw,\n\s+metadata,\n\s+outputPages,\n)(\s+output,)",
+                  r"\1          animationExpectation,\n\2",
+                  "pass animation expectation",
+              )
+              image = replace_regex_once(
+                  image,
+                  r"(async function renderOutput\(\n\s+raw: RawBase,\n\s+metadata: SharpMetadata,\n\s+outputPages: number,\n)(\s+recipe: ImageOutputRecipe,)",
+                  r"\1  animationExpectation: OutputAnimationExpectation,\n\2",
+                  "extend renderOutput signature",
+              )
+
+              output_block = '''    const bytes = Buffer.concat(chunks, Number(outputBytes));
+              const expectedHeight = info.pageHeight ?? info.height;
+              const verified = await verifySanitizedOutput(
+                bytes,
+                info.width,
+                expectedHeight,
+                animationExpectation,
+                options.deadlineMilliseconds,
+                signal,
+              );
+              if (info.pages !== undefined && info.pages !== verified.pages) {
+                throw outputContractError("encoder metadata page count mismatch");
+              }
+              assertBudget(
+                multiplyBigInt(verified.width, verified.height, verified.pages),
+                options.maxOutputPixels,
+                `Output ${recipe.outputId} exceeds the pixel limit`,
+              );
+              return {
+                outputId: recipe.outputId,
+                filename: `${recipe.outputId}.webp`,
+                bytes,
+                manifest: {
+                  mime_type: "image/webp",
+                  extension: "webp",
+                  byte_length: bytes.length,
+                  width: verified.width,
+                  height: verified.height,
+                  animated: verified.pages > 1,
+                  pages: verified.pages,
+                  digest: sha256Digest(bytes),
+                },
+              };'''
+              image = replace_regex_once(
+                  image,
+                  r"    const bytes = Buffer\.concat\(chunks, Number\(outputBytes\)\);\n    const pages = info\.pages \?\? 1;[\s\S]*?    \};(?=\n  \} catch \(error\) \{)",
+                  output_block,
+                  "replace encoder result handling",
+              )
+
+              verifier = '''type VerifiedOutput = {
+            width: number;
+            height: number;
+            pages: number;
+          };
+
+          async function verifySanitizedOutput(
+            bytes: Buffer,
+            width: number,
+            height: number,
+            animation: OutputAnimationExpectation,
+            deadlineMilliseconds: number,
+            signal: AbortSignal,
+          ): Promise<VerifiedOutput> {
+            if (detectMediaKind(bytes) !== "image") {
+              throw outputContractError("invalid output magic");
+            }
+            const verifier = sharp(bytes, { animated: true, pages: -1 }).timeout({
+              seconds: Math.ceil(deadlineMilliseconds / 1000),
+            });
+            const abort = () => verifier.destroy(signal.reason);
+            signal.addEventListener("abort", abort, { once: true });
+            let metadata: SharpMetadata;
+            try {
+              metadata = await verifier.metadata();
+            } catch {
+              throwIfProcessingAborted(signal);
+              throw outputContractError("output cannot be decoded");
+            } finally {
+              signal.removeEventListener("abort", abort);
+              verifier.destroy();
+            }
+
+            const pages = metadata.pages ?? 1;
+            if (
+              !Number.isInteger(pages) ||
+              pages < 1 ||
+              pages > animation.sourcePages
+            ) {
+              throw outputContractError("invalid page count");
+            }
+            const frameHeight = sourceFrameHeight(metadata, pages);
+            if (
+              metadata.format !== "webp" ||
+              metadata.width !== width ||
+              frameHeight !== height
+            ) {
+              throw outputContractError("format or geometry mismatch");
+            }
+            if (
+              metadata.exif !== undefined ||
+              metadata.icc !== undefined ||
+              metadata.xmp !== undefined ||
+              metadata.iptc !== undefined
+            ) {
+              throw outputContractError("metadata was not stripped");
+            }
+
+            if (animation.sourcePages === 1) {
+              if (pages !== 1) {
+                throw outputContractError("static source became animated");
+              }
+            } else if (pages === 1) {
+              if (!animation.canCollapseToStatic) {
+                throw outputContractError("non-identical frames collapsed to static");
+              }
+            } else {
+              const delays = metadata.delay;
+              if (!delays || delays.length !== pages) {
+                throw outputContractError("animation timing metadata is invalid");
+              }
+              const duration = delays.reduce(
+                (total, delay) => total + BigInt(delay),
+                0n,
+              );
+              if (duration !== animation.totalDurationMilliseconds) {
+                throw outputContractError("animation duration changed");
+              }
+              if ((metadata.loop ?? 0) !== animation.loop) {
+                throw outputContractError("animation loop changed");
+              }
+              if (
+                pages === animation.sourcePages &&
+                delays.some(
+                  (delay, index) => delay !== animation.sourceDelays[index],
+                )
+              ) {
+                throw outputContractError("animation frame timing changed");
+              }
+            }
+
+            return { width, height, pages };
+          }
+
+          function outputContractError(reason: string): MediaProcessingError {
+            return new MediaProcessingError(
+              "processing_failed",
+              `Encoder output contract verification failed: ${reason}`,
+            );
+          }
+
+          class AggregateByteBudget'''
+              image = replace_regex_once(
+                  image,
+                  r"async function verifySanitizedOutput\([\s\S]*?\n\}\n\nclass AggregateByteBudget",
+                  verifier,
+                  "replace output verifier",
+              )
+              image_path.write_text(image)
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text()
+          if "The WebP encoder may coalesce" not in readme:
+              new_policy = '''- `preserve`: visual animation semantics are retained within page, duration,
+            raw, pixel, byte, and deadline budgets. The WebP encoder may coalesce
+            consecutive equivalent frames, including emitting a static WebP when every
+            decoded frame is identical. Animated outputs are re-opened to verify total
+            duration and loop count, and the manifest reports the verified encoded page
+            count.'''
+              readme, count = re.subn(
+                  r"- `preserve`: all frames and timing are retained within page, duration, raw,\n\s+pixel, byte, and deadline budgets\.",
+                  new_policy,
+                  readme,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(
+                      f"document WebP frame coalescing: expected one match, found {count}"
+                  )
+              readme_path.write_text(readme)
+          PY
+
+      - name: Format changed files
+        run: bun x prettier --write src/image.ts src/image.animation-regression.test.ts README.md
+
+      - name: Validate focused change
+        run: bun run typecheck && bun test src/image.animation-regression.test.ts
+
+      - name: Commit fix to PR branch
+        run: |
+          rm -f .github/workflows/agent-pr25-fix.yml
+          rm -f .github/workflows/agent-pr25-fix-v2.yml
+          rm -f .github/workflows/agent-pr25-fix-v3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/image.ts src/image.animation-regression.test.ts README.md .github/workflows
+          git commit -m "fix: verify coalesced animation output metadata"
+          git push origin HEAD:fix/animated-raw-fanout-logging

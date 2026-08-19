@@ -79,12 +79,20 @@ Animation policy is explicit:
 
 - `reject`: animated sources fail.
 - `preserve`: all frames and timing are retained within page, duration, raw,
-  pixel, byte, and deadline budgets.
+  pixel, byte, and deadline budgets. The animated WebP encoder merges
+  consecutive frames that are identical (or, for lossy output, within its
+  quality-derived tolerance) into one frame carrying the summed delay, and
+  emits a still WebP when every frame collapses; each output manifest reports
+  the page count and `animated` flag of the bytes actually served, which may
+  therefore be smaller than the source page count.
 - `first_frame`: only frame zero is decoded and emitted; the manifest still
   reports the source as animated.
 
-Serving outputs are independently verified as WebP with the declared geometry
-and contain no EXIF, XMP, IPTC, ICC profile, or embedded thumbnail. A bounded
+Serving outputs are independently re-read and verified as WebP with the
+declared geometry, a page count between one and the source page count, and no
+EXIF, XMP, IPTC, ICC profile, or embedded thumbnail. A verification failure
+returns a generic `processing_failed` problem while the expected and actual
+values are written to the processor log. A bounded
 source metadata allowlist is extracted before sanitization and marked
 `restricted`; the caller owns any later privacy classification.
 
@@ -150,6 +158,11 @@ bun start
 ```
 
 ffmpeg, ffprobe, and prlimit must be on `PATH`. The default port is `6701`.
+Logs are structured JSON lines on stdout (pino); `LOG_LEVEL` selects `fatal`,
+`error`, `warn`, `info` (default), `debug`, `trace`, or `silent`, and an
+unknown value fails startup. Rejected requests, encoder contract violations,
+underlying libvips diagnostics, and ffmpeg/ffprobe failures (bounded stderr
+tail) are logged with structured fields; problem responses stay generic.
 Production startup is fail-closed on non-Linux platforms or when any of these
 runtime dependencies is unavailable. Direct Windows/macOS execution remains a
 development and unit-test convenience, not a supported production profile.

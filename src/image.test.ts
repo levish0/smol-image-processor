@@ -118,6 +118,41 @@ async function animatedFixture(delays = [80, 120]): Promise<Buffer> {
     .toBuffer();
 }
 
+/**
+ * Animated GIF whose frames follow `pattern` (e.g. "AABBA"), keeping duplicate
+ * consecutive frames as distinct pages so the WebP encoder's frame merging can
+ * be exercised. `size` scales the 2:1 frame canvas.
+ */
+async function duplicateFrameFixture(
+  pattern: string,
+  delays: number[],
+  size = 1,
+): Promise<Buffer> {
+  const width = 2 * size;
+  const height = 1 * size;
+  const a = await fixture(width, height);
+  const b = await sharp(a).negate().png().toBuffer();
+  const frames = Array.from(pattern, (letter) => (letter === "A" ? a : b));
+  return sharp(frames, { join: { animated: true } })
+    .gif({ delay: delays, loop: 0, keepDuplicateFrames: true })
+    .toBuffer();
+}
+
+async function uniqueFrameFixture(
+  frames: number,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const pages: Buffer[] = [];
+  for (let index = 0; index < frames; index += 1) {
+    const svg = `<svg width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="rgb(${(index * 37) % 256},${(index * 91) % 256},${(index * 53) % 256})"/><rect x="${(index * 7) % width}" y="${(index * 11) % height}" width="8" height="8" fill="white"/></svg>`;
+    pages.push(await sharp(Buffer.from(svg)).png().toBuffer());
+  }
+  return sharp(pages, { join: { animated: true } })
+    .gif({ delay: 40, loop: 0, keepDuplicateFrames: true })
+    .toBuffer();
+}
+
 function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -306,6 +341,100 @@ describe("processImageRecipe", () => {
       pages: 1,
     });
   });
+
+  test("preserved animations report the encoded page count when identical frames merge", async () => {
+    // libwebp merges consecutive identical frames into one frame with the
+    // summed delay; the manifest must describe the bytes actually served.
+    const merged = await duplicateFrameFixture("AABBA", [40, 60, 80, 100, 120]);
+    const result = await processImageRecipe(
+      merged,
+      recipe([inside("display", 100)], "preserve"),
+      options,
+    );
+    expect(result.manifest.source).toMatchObject({ animated: true, pages: 5 });
+    const output = result.outputs[0]!;
+    expect(output.manifest).toMatchObject({
+      animated: true,
+      pages: 3,
+      width: 2,
+      height: 1,
+    });
+    const encoded = await sharp(output.bytes, {
+      animated: true,
+      pages: -1,
+    }).metadata();
+    expect(encoded.pages).toBe(3);
+    expect(encoded.delay).toEqual([100, 180, 120]);
+    expect(encoded.loop).toBe(0);
+  });
+
+  test("preserved animations whose frames all collapse become a still WebP", async () => {
+    const still = await duplicateFrameFixture("AAA", [40, 40, 40]);
+    const result = await processImageRecipe(
+      still,
+      recipe([inside("display", 100)], "preserve"),
+      options,
+    );
+    expect(result.manifest.source).toMatchObject({ animated: true, pages: 3 });
+    expect(result.outputs[0]?.manifest).toMatchObject({
+      animated: false,
+      pages: 1,
+      width: 2,
+      height: 1,
+    });
+    const encoded = await sharp(result.outputs[0]!.bytes, {
+      animated: true,
+      pages: -1,
+    }).metadata();
+    expect(encoded.format).toBe("webp");
+    expect(encoded.pages ?? 1).toBe(1);
+  });
+
+  test("preserved animations keep every unique frame past a 16,383px raw stack", async () => {
+    // Regression for issue #24: 86 unique 200x200 frames decode to a
+    // 200x17,200 raw stack; the encoded WebP must still carry all 86 pages.
+    const frames = 86;
+    const source = await uniqueFrameFixture(frames, 200, 200);
+    const result = await processImageRecipe(
+      source,
+      recipe([inside("full", 200), inside("thumb", 64)], "preserve"),
+      {
+        ...options,
+        maxPages: 100,
+        maxInputPixels: 200 * 200 * frames,
+        maxDecodedBytes: 200 * 200 * frames * 4,
+        maxOutputPixels: 200 * 200 * frames,
+        maxAggregateOutputPixels: 2 * 200 * 200 * frames,
+        maxOutputBytes: 8 * 1024 * 1024,
+        maxAggregateOutputBytes: 16 * 1024 * 1024,
+        maxAnimationDurationMilliseconds: 40 * frames,
+      },
+    );
+    expect(result.manifest.source).toMatchObject({
+      animated: true,
+      pages: frames,
+      width: 200,
+      height: 200,
+    });
+    for (const output of result.outputs) {
+      expect(output.manifest).toMatchObject({ animated: true, pages: frames });
+      const encoded = await sharp(output.bytes, {
+        animated: true,
+        pages: -1,
+      }).metadata();
+      expect(encoded.pages).toBe(frames);
+      expect(encoded.pageHeight).toBe(output.manifest.height);
+      expect(encoded.delay).toHaveLength(frames);
+    }
+    expect(result.outputs[0]?.manifest).toMatchObject({
+      width: 200,
+      height: 200,
+    });
+    expect(result.outputs[1]?.manifest).toMatchObject({
+      width: 64,
+      height: 64,
+    });
+  }, 60_000);
 
   test("enforces page and animation-duration max-1, max, and max+1 before decode", async () => {
     const onePage = await fixture(2, 1);

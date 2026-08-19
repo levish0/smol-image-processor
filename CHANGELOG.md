@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Preserved animations no longer fail with
+  `Encoder output contract verification failed` when the animated WebP encoder
+  merges consecutive identical (or, for lossy output, near-identical) frames.
+  Output verification now accepts any page count from one up to the source
+  page count, and each output manifest reports the page count and `animated`
+  flag of the encoded bytes rather than the encoder input (issue #24). The
+  reported 16,383-pixel raw stack boundary was not reproducible; 86 and 100
+  unique 200x200 frames round-trip intact and are covered by regression tests.
+
+### Added
+
+- Structured JSON logging on stdout via pino with an operator-owned
+  `LOG_LEVEL` (default `info`, invalid values fail startup).
+- Contract-verification failures log the expected and actual format, geometry,
+  page count, and metadata presence; sharp/libvips diagnostics behind generic
+  image failures and ffmpeg/ffprobe failures (bounded stderr tail) are logged.
+- Rejected requests are logged with route, problem code, and status.
+
 ## [0.3.1] - 2026-08-13
 
 ### Added

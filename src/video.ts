@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDeadline } from "./deadline";
 import { MediaProcessingError, throwIfProcessingAborted } from "./errors";
+import { logger } from "./logger";
 import { PROCESSOR_POLICY_V1 } from "./policy";
 import type { ProcessedMediaBase } from "./types";
 
@@ -557,6 +558,8 @@ function parseFrameRate(value: string | undefined): number {
   return denominator > 0 ? numerator / denominator : Number.NaN;
 }
 
+const STDERR_TAIL_CHARS = 2048;
+
 type ProcessResult = {
   stdout: string;
   stderr: string;
@@ -609,6 +612,28 @@ async function runProcess(
       readBoundedText(proc.stderr, PROCESS_OUTPUT_LIMIT_BYTES, onOutputLimit),
       proc.exited,
     ]);
+    const resourceExhausted = isChildResourceExhaustion(
+      exitCode,
+      proc.signalCode,
+      stderr,
+    );
+    if (exitCode !== 0 || timedOut || outputExceeded || resourceExhausted) {
+      // The public problem response stays generic; keep the child's own
+      // diagnostics (bounded) in the processor log for triage.
+      logger.warn(
+        {
+          command,
+          exit_code: exitCode,
+          signal_code: proc.signalCode,
+          timed_out: timedOut,
+          cancelled,
+          output_exceeded: outputExceeded,
+          resource_exhausted: resourceExhausted,
+          stderr_tail: stderr.trimEnd().slice(-STDERR_TAIL_CHARS),
+        },
+        "Child process failed",
+      );
+    }
     return {
       stdout,
       stderr,
@@ -616,11 +641,7 @@ async function runProcess(
       timedOut,
       cancelled,
       outputExceeded,
-      resourceExhausted: isChildResourceExhaustion(
-        exitCode,
-        proc.signalCode,
-        stderr,
-      ),
+      resourceExhausted,
     };
   } finally {
     clearTimeout(timer);

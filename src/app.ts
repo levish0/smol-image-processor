@@ -4,6 +4,7 @@ import { loadProcessorConfig, type ProcessorConfig } from "./config";
 import { detectMediaKind } from "./detect";
 import { MediaProcessingError, problemDetails } from "./errors";
 import { processImageRecipe, type ProcessedImageRecipe } from "./image";
+import { logger } from "./logger";
 import { encodeMultipartRelated, parseMultipartRequest } from "./multipart";
 import { parseImageRecipe } from "./recipe";
 import { processVideo, type ProcessedVideo } from "./video";
@@ -40,7 +41,7 @@ export function createApp(
     .post(
       "/v1/images/process",
       ({ request }) =>
-        handle(() =>
+        handle("image", () =>
           runWithDeadline(
             request.signal,
             config.image.deadlineMilliseconds,
@@ -82,7 +83,7 @@ export function createApp(
     .post(
       "/v1/videos/process",
       ({ request }) =>
-        handle(() =>
+        handle("video", () =>
           runWithDeadline(
             request.signal,
             config.video.deadlineMilliseconds,
@@ -135,14 +136,21 @@ async function runWithDeadline(
   }
 }
 
-async function handle(operation: () => Promise<Response>): Promise<Response> {
+async function handle(
+  route: "image" | "video",
+  operation: () => Promise<Response>,
+): Promise<Response> {
   try {
     return await operation();
   } catch (error) {
     if (error instanceof MediaProcessingError) {
+      logger.warn(
+        { route, code: error.code, status: error.status },
+        error.message,
+      );
       return problem(error.code, error.message);
     }
-    console.error("Unexpected media processing error:", error);
+    logger.error({ route, err: error }, "Unexpected media processing error");
     return problem("internal_error", "Failed to process media");
   }
 }

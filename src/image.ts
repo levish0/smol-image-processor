@@ -560,7 +560,7 @@ async function verifySanitizedOutput(
   bytes: Buffer,
   width: number,
   height: number,
-  expectedPages: number,
+  maximumPages: number,
   deadlineMilliseconds: number,
   signal: AbortSignal,
 ): Promise<VerifiedImageOutput> {
@@ -595,7 +595,8 @@ async function verifySanitizedOutput(
     metadata.width !== width ||
     verifiedHeight !== height ||
     !Number.isInteger(pages) ||
-    pages !== expectedPages ||
+    pages < 1 ||
+    pages > maximumPages ||
     metadata.exif !== undefined ||
     metadata.icc !== undefined ||
     metadata.xmp !== undefined ||

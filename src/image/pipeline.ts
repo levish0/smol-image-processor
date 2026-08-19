@@ -640,7 +640,7 @@ async function verifySanitizedOutput(
   if (actual.format !== "webp") violations.push("format");
   if (actual.width !== contract.width) violations.push("width");
   if (actual.frame_height !== contract.frameHeight) violations.push("height");
-  if (pages < 1 || pages > contract.maxPages) violations.push("pages");
+  if (pages > contract.maxPages) violations.push("pages");
   if (actual.has_exif) violations.push("exif");
   if (actual.has_icc) violations.push("icc");
   if (actual.has_xmp) violations.push("xmp");

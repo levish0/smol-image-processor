@@ -138,6 +138,25 @@ describe("large animated image regression", () => {
   });
 
   test("retains explicitly duplicated source frames", async () => {
-    await expectPreservedOutputs(await duplicateFrameGif());
+    const input = await duplicateFrameGif();
+    const direct = await sharp(input, { animated: true, pages: -1 })
+      .webp({ quality: 85, effort: 4 })
+      .toBuffer();
+    const directMetadata = await sharp(direct, {
+      animated: true,
+      pages: -1,
+    }).metadata();
+    console.info(
+      "duplicate direct output",
+      JSON.stringify({
+        pages: directMetadata.pages,
+        pageHeight: directMetadata.pageHeight,
+        height: directMetadata.height,
+        delay: directMetadata.delay,
+        loop: directMetadata.loop,
+      }),
+    );
+
+    await expectPreservedOutputs(input);
   });
 });

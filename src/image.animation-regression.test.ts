@@ -34,35 +34,40 @@ const options: ImageProcessingOptions = {
   deadlineMilliseconds: 30_000,
 };
 
+async function solidFrame(colour: string): Promise<Buffer> {
+  return sharp({
+    create: {
+      width: FRAME_WIDTH,
+      height: FRAME_HEIGHT,
+      channels: 4,
+      background: colour,
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
 async function largeAnimatedGif(): Promise<Buffer> {
-  const first = await sharp({
-    create: {
-      width: FRAME_WIDTH,
-      height: FRAME_HEIGHT,
-      channels: 4,
-      background: "#336699ff",
-    },
-  })
-    .png()
-    .toBuffer();
-  const second = await sharp({
-    create: {
-      width: FRAME_WIDTH,
-      height: FRAME_HEIGHT,
-      channels: 4,
-      background: "#cc6633ff",
-    },
-  })
-    .png()
-    .toBuffer();
+  const first = await solidFrame("#336699ff");
+  const second = await solidFrame("#cc6633ff");
   const frames = Array.from({ length: FRAME_COUNT }, (_, index) =>
     index % 2 === 0 ? first : second,
   );
 
+  return encodeGif(frames);
+}
+
+async function duplicateFrameGif(): Promise<Buffer> {
+  const frame = await solidFrame("#336699ff");
+  return encodeGif(Array(FRAME_COUNT).fill(frame), true);
+}
+
+function encodeGif(frames: Buffer[], keepDuplicateFrames = false) {
   return sharp(frames, { join: { animated: true } })
     .gif({
       delay: Array(FRAME_COUNT).fill(FRAME_DELAY_MS),
       loop: 0,
+      keepDuplicateFrames,
     })
     .toBuffer();
 }
@@ -96,49 +101,43 @@ function preserveRecipe() {
   );
 }
 
-describe("large animated image regression", () => {
-  test("renders four responsive variants above the raw stacked-height boundary", async () => {
-    const input = await largeAnimatedGif();
+async function expectPreservedOutputs(input: Buffer): Promise<void> {
+  const sourceMetadata = await sharp(input, {
+    animated: true,
+    pages: -1,
+  }).metadata();
+  expect(sourceMetadata.pages).toBe(FRAME_COUNT);
+  expect(sourceMetadata.pageHeight).toBe(FRAME_HEIGHT);
 
-    const direct = await sharp(input, {
-      animated: true,
-      pages: -1,
-      limitInputPixels: options.maxInputPixels,
-    })
-      .resize({ width: FRAME_WIDTH, withoutEnlargement: true })
-      .webp({ quality: 85, effort: 4 })
-      .toBuffer();
-    const directMetadata = await sharp(direct, {
+  const processed = await processImageRecipe(input, preserveRecipe(), options);
+  expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
+
+  for (const output of processed.outputs) {
+    const metadata = await sharp(output.bytes, {
       animated: true,
       pages: -1,
     }).metadata();
-    expect(directMetadata.pages).toBe(FRAME_COUNT);
-    expect(directMetadata.pageHeight).toBe(FRAME_HEIGHT);
 
-    const processed = await processImageRecipe(
-      input,
-      preserveRecipe(),
-      options,
-    );
-    expect(processed.outputs).toHaveLength(OUTPUT_COUNT);
+    expect(output.manifest).toMatchObject({
+      animated: true,
+      pages: FRAME_COUNT,
+      width: FRAME_WIDTH,
+      height: FRAME_HEIGHT,
+    });
+    expect(metadata.pages).toBe(FRAME_COUNT);
+    expect(metadata.pageHeight).toBe(FRAME_HEIGHT);
+    expect(metadata.height).toBe(FRAME_HEIGHT * FRAME_COUNT);
+    expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
+    expect(metadata.loop).toBe(0);
+  }
+}
 
-    for (const output of processed.outputs) {
-      const metadata = await sharp(output.bytes, {
-        animated: true,
-        pages: -1,
-      }).metadata();
+describe("large animated image regression", () => {
+  test("renders four responsive variants above the raw stacked-height boundary", async () => {
+    await expectPreservedOutputs(await largeAnimatedGif());
+  });
 
-      expect(output.manifest).toMatchObject({
-        animated: true,
-        pages: FRAME_COUNT,
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
-      });
-      expect(metadata.pages).toBe(FRAME_COUNT);
-      expect(metadata.pageHeight).toBe(FRAME_HEIGHT);
-      expect(metadata.height).toBe(FRAME_HEIGHT * FRAME_COUNT);
-      expect(metadata.delay).toEqual(Array(FRAME_COUNT).fill(FRAME_DELAY_MS));
-      expect(metadata.loop).toBe(0);
-    }
+  test("retains explicitly duplicated source frames", async () => {
+    await expectPreservedOutputs(await duplicateFrameGif());
   });
 });

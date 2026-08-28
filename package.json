@@ -18,7 +18,7 @@
     "check": "bun run contracts:check && bun run fmt:check && bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
-    "@fastify/busboy": "^3.2.1",
+    "@fastify/busboy": "^3.2.2",
     "@sinclair/typebox": "0.34.52",
     "canonicalize": "4.0.0",
     "elysia": "^1.4.29",
